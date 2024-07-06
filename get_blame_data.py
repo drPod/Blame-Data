@@ -182,8 +182,14 @@ def process_commits(input_file, blame_output_file):
                 existing_row
                 and existing_metadata
                 and all(field in existing_row for field in blame_fieldnames)
+                and "commit_metadata" in existing_metadata
             ):
+                logging.info(
+                    f"Skipping commit: {commit_id} because it's already been processed"
+                )
                 continue  # Skip if we have complete data for this commit
+            if existing_row:
+                logging.info(f"Reprocessing commit: {commit_id}")
 
             project_name = row["project_name"]
             repo_url = row["repo_url"]
