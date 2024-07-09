@@ -1,149 +1,14 @@
+from tqdm import tqdm
 import csv
 import os
 import json
 import subprocess
-import requests
-from git import Repo
 import logging
-from tqdm import tqdm
 
-# Set up logging
-logging.basicConfig(
-    filename="malicious_commit_analysis.log",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-
-# Constants
-PATCH_CACHE_DIR = "patch_cache"
-REPO_CACHE_DIR = "repo_cache"
-COMMIT_METADATA_DIR = "commit_metadata"
-
-
-def ensure_dirs():
-    """Ensure all necessary directories exist."""
-    for directory in [PATCH_CACHE_DIR, REPO_CACHE_DIR, COMMIT_METADATA_DIR]:
-        os.makedirs(directory, exist_ok=True)
-
-
-def get_cached_patch_path(commit_url):
-    """Generate a unique filename for caching the patch."""
-    filename = commit_url.split("/")[-1].replace("/", "_") + ".patch"
-    return os.path.join(PATCH_CACHE_DIR, filename)
-
-
-def get_patch_info(commit_url):
-    try:
-        clean_url = commit_url.split("#")[0]
-        patch_url = clean_url + ".patch"
-        cached_patch_path = get_cached_patch_path(clean_url)
-
-        if os.path.exists(cached_patch_path):
-            logging.info(f"Using cached patch for: {clean_url}")
-            with open(cached_patch_path, "r") as patch_file:
-                patch_content = patch_file.read()
-        else:
-            logging.info(f"Fetching patch from: {patch_url}")
-            response = requests.get(patch_url)
-            response.raise_for_status()
-            patch_content = response.text
-            with open(cached_patch_path, "w") as patch_file:
-                patch_file.write(patch_content)
-            logging.info(f"Saved patch to: {cached_patch_path}")
-
-        file_changes = {}
-        current_file = None
-        in_changelog = False
-
-        for line in patch_content.split("\n"):
-            if line.startswith("---"):
-                parts = line.split(" ")
-                if len(parts) > 1:
-                    current_file = parts[1][2:]
-                    file_changes[current_file] = (
-                        {  # This is a dictionary to store the changes for each file
-                            "removed": [],
-                            "added": [],
-                            "context": [],
-                        }
-                    )
-                    in_changelog = False
-                else:
-                    in_changelog = True
-            elif not in_changelog and current_file:
-                if line.startswith("-") and not line.startswith("---"):
-                    file_changes[current_file]["removed"].append(line[1:])
-                elif line.startswith("+") and not line.startswith("+++"):
-                    file_changes[current_file]["added"].append(line[1:])
-                else:
-                    file_changes[current_file]["context"].append(line)
-        logging.info(f"Found {len(file_changes)} files in patch")
-        return file_changes
-    except Exception as e:
-        logging.error(f"Error in get_patch_info for {commit_url}: {str(e)}")
-        return None
-
-
-def get_or_create_repo(repo_url):
-    repo_name = repo_url.split("/")[-1]
-    repo_path = os.path.join(REPO_CACHE_DIR, repo_name)
-    if not os.path.exists(repo_path):
-        logging.info(f"Cloning repository: {repo_url}")
-        try:
-            repo = Repo.clone_from(repo_url, repo_path)
-            logging.info(f"Successfully cloned repository: {repo_url}")
-            return repo
-        except Exception as e:
-            logging.error(f"Error cloning repository {repo_url}: {str(e)}")
-            return None
-    else:
-        try:
-            repo = Repo(repo_path)
-            repo.remotes.origin.pull()
-            logging.info(f"Successfully updated repository: {repo_url}")
-            return repo
-        except Exception as e:
-            logging.error(
-                f"Error opening or updating repository at {repo_path}: {str(e)}"
-            )
-            return None
-
-
-def get_commit_metadata(repo, commit_hash):
-    try:
-        clean_commit_hash = commit_hash.lstrip("^")
-        commit = repo.commit(clean_commit_hash)
-        return {
-            "hash": commit.hexsha,
-            "author": commit.author.name,
-            "author_email": commit.author.email,
-            "committed_date": commit.committed_datetime.isoformat(),
-            "message": commit.message.strip(),
-            "files_changed": list(commit.stats.files.keys()),
-            "insertions": commit.stats.total["insertions"],
-            "deletions": commit.stats.total["deletions"],
-        }
-    except Exception as e:
-        logging.error(f"Error retrieving metadata for commit {commit_hash}: {str(e)}")
-        return None
-
-
-def read_existing_blame_data(blame_output_file):
-    existing_data = {}
-    if os.path.exists(blame_output_file):
-        with open(blame_output_file, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                existing_data[row["commit_id"]] = row
-    return existing_data
-
-
-def read_existing_metadata(cve_id):
-    json_filename = os.path.join(COMMIT_METADATA_DIR, f"{cve_id}.json")
-    if os.path.exists(json_filename):
-        with open(json_filename, "r") as f:
-            return json.load(f)
-    return None
+from ensure_directories import ensure_dirs
+from constants import COMMIT_METADATA_DIR
+from read_existing_data import read_existing_blame_data, read_existing_metadata
+from get_cache import get_or_create_repo, get_patch_info, get_commit_metadata
 
 
 def process_commits(input_file, blame_output_file):
@@ -322,13 +187,3 @@ def process_commits(input_file, blame_output_file):
     logging.info(
         f"Processing complete. Results saved to {blame_output_file} and {COMMIT_METADATA_DIR}"
     )
-
-
-if __name__ == "__main__":
-    input_file = "commits_with_parent_ids.csv"
-    blame_output_file = "commits_with_blame_data.csv"
-    process_commits(input_file, blame_output_file)
-    print(
-        f"Processing complete. Results saved to {blame_output_file} and {COMMIT_METADATA_DIR}"
-    )
-    print(f"Log file: malicious_commit_analysis.log")
