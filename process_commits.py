@@ -37,9 +37,17 @@ def process_commits(input_file, blame_output_file):
         in_f.seek(0)
         next(reader)  # Skip header row
 
+        current_cve = None
         for row in tqdm(reader, desc="Processing commits", total=total_rows):
             cve_id = row["cve_id"]
             commit_id = row["commit_id"]
+
+            # Log when starting a new CVE
+            if cve_id != current_cve:
+                if current_cve is not None:
+                    logging.info(f"Finished processing CVE: {current_cve}")
+                current_cve = cve_id
+                logging.info(f"Starting to process CVE: {cve_id}")
 
             # Check if we need to process this commit
             existing_row = existing_blame_data.get(commit_id)
@@ -154,6 +162,10 @@ def process_commits(input_file, blame_output_file):
                     if line_content in lines_to_check or any(
                         check_line in line_content for check_line in lines_to_check
                     ):
+                        if commit_hash.startswith(
+                            "^"
+                        ):  # Remove ^ from the beginning of the commit hash
+                            commit_hash = commit_hash[1:]
                         malicious_commit_hashes.add(commit_hash)
                         file_is_malicious = True
                         malicious_lines.append(line_content)
