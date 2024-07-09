@@ -4,6 +4,7 @@ import requests
 from git import Repo
 
 from constants import REPO_CACHE_DIR, PATCH_CACHE_DIR
+from constants import loggingConfig
 
 
 def get_cached_patch_path(commit_url):
@@ -13,6 +14,8 @@ def get_cached_patch_path(commit_url):
 
 
 def get_or_create_repo(repo_url):
+    """Get or create a repository object."""
+    loggingConfig()
     repo_name = repo_url.split("/")[-1]
     repo_path = os.path.join(REPO_CACHE_DIR, repo_name)
     if not os.path.exists(repo_path):
@@ -38,6 +41,13 @@ def get_or_create_repo(repo_url):
 
 
 def get_patch_info(commit_url):
+    """Get the changes made in a commit
+    Args:
+        commit_url (str): URL to the commit
+    Returns:
+        dict: A dictionary containing the changes made in the commit
+    """
+    loggingConfig()
     try:
         clean_url = commit_url.split("#")[0]
         patch_url = clean_url + ".patch"
@@ -90,6 +100,14 @@ def get_patch_info(commit_url):
 
 
 def get_commit_metadata(repo, commit_hash):
+    """Get metadata for a commit.
+    Args:
+        repo (git.Repo): Repository object
+        commit_hash (str): Hash of the commit
+    Returns:
+        dict: A dictionary containing metadata for the commit
+    """
+    loggingConfig()
     try:
         clean_commit_hash = commit_hash.lstrip("^")
         commit = repo.commit(clean_commit_hash)

@@ -7,11 +7,13 @@ import logging
 
 from ensure_directories import ensure_dirs
 from constants import COMMIT_METADATA_DIR
+from constants import loggingConfig
 from read_existing_data import read_existing_blame_data, read_existing_metadata
 from get_cache import get_or_create_repo, get_patch_info, get_commit_metadata
 
 
 def process_commits(input_file, blame_output_file):
+    loggingConfig()
     ensure_dirs()
     repos = {}
 
@@ -59,7 +61,6 @@ def process_commits(input_file, blame_output_file):
             project_name = row["project_name"]
             repo_url = row["repo_url"]
             commit_url = row["commit_url"]
-            parent_commit_id = row["parent_commit_id"]
 
             if repo_url not in repos:
                 repo = get_or_create_repo(repo_url)
@@ -100,7 +101,6 @@ def process_commits(input_file, blame_output_file):
                             "git",
                             "blame",
                             "-l",
-                            "-C",
                             "-C",
                             "-M",
                             commit_id,
