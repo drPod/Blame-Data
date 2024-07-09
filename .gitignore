@@ -3,3 +3,4 @@
 /repo_cache
 malicious_commit_analysis.log
 commits_with_blame_data.csv
+.DS_Store
