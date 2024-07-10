@@ -80,24 +80,33 @@ def get_patch_info(commit_url):
         for i, section in enumerate(patch_content.split("diff --git")[1:]):
             changes = []
             malicious_lines = []
+            context_lines = []
             used_context_lines = False
             lines = section.split("\n")
-            for line in lines:
-                if line.startswith("-") and not line.startswith("---"):
-                    changes.append(line)
-                    malicious_lines.append(line)
-                elif line.startswith("+") and not line.startswith("+++"):
-                    changes.append(line)
-                    malicious_lines.append(line)
+            in_hunk = False
 
-            if not changes:
-                for line in lines[1:]:
-                    if line.startswith("+") and not line.startswith("+++"):
-                        changes.append(line)
+            for line in lines:
+                if line.startswith("@@"):
+                    in_hunk = True
+                    context_lines = []
+                elif in_hunk:
+                    if line.startswith("-"):
                         malicious_lines.append(line)
+                        changes.append(line)
+                    elif line.startswith("+"):
+                        changes.append(line)
+                    else:
+                        context_lines.append(line)
+
+            if not malicious_lines:
                 used_context_lines = True
-            else:
-                changes.append("Minus lines used")
+                for line in lines:
+                    if line.startswith("+") and not line.startswith("+++"):
+                        malicious_lines = context_lines + [line]
+                        changes.extend(malicious_lines)
+                        break
+                    elif not line.startswith(("+++", "---", "@@")):
+                        context_lines.append(line)
 
             if i < len(filenames):
                 filename = filenames[i]
