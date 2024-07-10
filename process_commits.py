@@ -2,7 +2,6 @@ from tqdm import tqdm
 import csv
 import os
 import json
-import subprocess
 import logging
 
 from ensure_directories import ensure_dirs
@@ -23,11 +22,7 @@ def process_commits(input_file, blame_output_file):
         blame_output_file, "a", newline=""
     ) as blame_out_f:
         reader = csv.DictReader(in_f)
-        blame_fieldnames = reader.fieldnames + [
-            "malicious_files",
-            "malicious_commit_hashes",
-            "used_context_lines",
-        ]
+        blame_fieldnames = reader.fieldnames + ["malicious_files", "used_context_lines"]
         blame_writer = csv.DictWriter(blame_out_f, fieldnames=blame_fieldnames)
 
         if not existing_blame_data:
@@ -79,117 +74,33 @@ def process_commits(input_file, blame_output_file):
                 repo = repos[repo_url]
 
             patch_info = get_patch_info(commit_url)
+            logging.info(f"Patch info: {patch_info}")
             if not patch_info:
                 logging.warning(f"No patch info found for commit: {commit_id}")
                 continue
 
-            malicious_commit_hashes = set()
-            malicious_files = set()
-            used_context_lines = False
+            malicious_files = set(
+                patch_info.keys()
+            )  # All files with changes are considered malicious
+            used_context_lines = any(
+                "Context lines used" in changes for changes in patch_info.values()
+            )
+
             commit_data = {
                 "cve_id": cve_id,
                 "project_name": project_name,
                 "commit_id": commit_id,
-                "malicious_files": [],
+                "malicious_files": list(malicious_files),
             }
 
-            logging.info(f"Processing commit: {commit_id}")
-            for filename, changes in patch_info.items():
-                removed_lines = changes["removed"]
-                context_lines = changes["context"]
-                lines_to_check = removed_lines if removed_lines else context_lines
-
-                if not lines_to_check:
-                    continue
-
-                try:
-                    logging.info(f"Running git blame on file: {filename}")
-                    blame_process = subprocess.Popen(
-                        [
-                            "git",
-                            "blame",
-                            "-l",
-                            "-C",
-                            "-M",
-                            commit_id,
-                            "--",
-                            filename,
-                        ],
-                        cwd=repo.working_dir,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                    )
-
-                    blame_output, blame_error = blame_process.communicate()
-
-                    if blame_process.returncode != 0:
-                        logging.warning(
-                            f"Git blame failed for file {filename}: {blame_error.decode('utf-8', errors='replace')}"
-                        )
-                        continue
-
-                    # Try to decode with UTF-8 first, fall back to latin-1 if that fails
-                    try:
-                        blame_output = blame_output.decode("utf-8")
-                    except UnicodeDecodeError:
-                        logging.warning(
-                            f"Failed to decode blame output as UTF-8 for file {filename}, falling back to latin-1"
-                        )
-                        blame_output = blame_output.decode("latin-1")
-
-                except Exception as e:
-                    logging.warning(
-                        f"Could not run git blame on file: {filename}. Error: {str(e)}. Skipping file."
-                    )
-                    continue
-
-                logging.info(f"Checking file: {filename}")
-
-                file_is_malicious = False  # Flag to check if file is malicious
-                malicious_lines = []  # List to store malicious lines
-                for line in blame_output.split(
-                    "\n"
-                ):  # Iterate over each line in the blame output
-                    if not line:
-                        continue  # Skip empty lines
-                    parts = line.split(")")
-                    if len(parts) < 2:
-                        continue  # Skip lines that don't have a commit hash and line content
-                    hash_and_line = parts[0]
-                    commit_hash = hash_and_line.split(" ")[0]
-                    line_content = ")".join(parts[1:]).strip()
-
-                    if line_content in lines_to_check or any(
-                        check_line in line_content for check_line in lines_to_check
-                    ):
-                        if commit_hash.startswith(
-                            "^"
-                        ):  # Remove ^ from the beginning of the commit hash
-                            commit_hash = commit_hash[1:]
-                        malicious_commit_hashes.add(commit_hash)
-                        file_is_malicious = True
-                        malicious_lines.append(line_content)
-
-                if file_is_malicious:
-                    malicious_files.add(filename)
-                    commit_data["malicious_files"].append(
-                        {"filename": filename, "malicious_lines": malicious_lines}
-                    )
-
-            if not removed_lines and context_lines:
-                used_context_lines = True
-
             row["malicious_files"] = ",".join(malicious_files)
-            row["malicious_commit_hashes"] = ",".join(malicious_commit_hashes)
             row["used_context_lines"] = "Yes" if used_context_lines else "No"
             blame_writer.writerow(row)
 
-            # Get metadata for malicious commits
-            for hash in malicious_commit_hashes:
-                metadata = get_commit_metadata(repo, hash)
-                if metadata:
-                    metadata["original_hash"] = hash
-                    commit_data["commit_metadata"] = metadata
+            # Get metadata for the commit
+            metadata = get_commit_metadata(repo, commit_id)
+            if metadata:
+                commit_data["commit_metadata"] = metadata
 
             # Write individual JSON file for each CVE
             json_filename = os.path.join(COMMIT_METADATA_DIR, f"{cve_id}.json")

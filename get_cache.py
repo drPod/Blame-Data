@@ -43,9 +43,9 @@ def get_or_create_repo(repo_url):
 def get_patch_info(commit_url):
     """Get the changes made in a commit
     Args:
-        commit_url (str): URL to the commit
+    commit_url (str): URL to the commit
     Returns:
-        dict: A dictionary containing the changes made in the commit
+    dict: A dictionary containing the changes made in the commit
     """
     loggingConfig()
     try:
@@ -66,34 +66,45 @@ def get_patch_info(commit_url):
                 patch_file.write(patch_content)
             logging.info(f"Saved patch to: {cached_patch_path}")
 
-        file_changes = {}
-        current_file = None
-        in_changelog = False
+        file_changes = {}  # Initialize a dictionary to hold the file changes
 
+        # Collect all filenames first
+        filenames = []
         for line in patch_content.split("\n"):
-            if line.startswith("---"):
-                parts = line.split(" ")
-                if len(parts) > 1:
-                    current_file = parts[1][2:]
-                    file_changes[current_file] = (
-                        {  # This is a dictionary to store the changes for each file
-                            "removed": [],
-                            "added": [],
-                            "context": [],
-                        }
-                    )
-                    in_changelog = False
-                else:
-                    in_changelog = True
-            elif not in_changelog and current_file:
+            if line.startswith("diff --git"):
+                filename = line.split()[-2].lstrip("a/")
+                filenames.append(filename)
+                file_changes[filename] = []  # Initialize an empty list for each file
+
+        # Process changes
+        for i, section in enumerate(
+            patch_content.split("diff --git")[1:]
+        ):  # Skip the first empty split
+            changes = []
+            lines = section.split("\n")
+            for line in lines:
                 if line.startswith("-") and not line.startswith("---"):
-                    file_changes[current_file]["removed"].append(line[1:])
-                elif line.startswith("+") and not line.startswith("+++"):
-                    file_changes[current_file]["added"].append(line[1:])
-                else:
-                    file_changes[current_file]["context"].append(line)
+                    changes.append(line)
+            if not changes:
+                for line in lines[1:]:
+                    if line.startswith("+") and not line.startswith("+++"):
+                        changes.append(line)
+                changes.append("Context lines used")
+            else:
+                changes.append("Minus lines used")
+
+            if i < len(filenames):
+                filename = filenames[i]
+                file_changes[filename] = changes
+            else:
+                logging.warning(
+                    f"More diff sections than filenames. Extra changes: {changes}"
+                )
+
         logging.info(f"Found {len(file_changes)} files in patch")
+        logging.info(f"FILE CHANGES: {file_changes}")
         return file_changes
+
     except Exception as e:
         logging.error(f"Error in get_patch_info for {commit_url}: {str(e)}")
         return None
