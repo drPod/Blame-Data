@@ -77,25 +77,35 @@ def get_patch_info(commit_url):
                 file_changes[filename] = []  # Initialize an empty list for each file
 
         # Process changes
-        for i, section in enumerate(
-            patch_content.split("diff --git")[1:]
-        ):  # Skip the first empty split
+        for i, section in enumerate(patch_content.split("diff --git")[1:]):
             changes = []
+            malicious_lines = []
+            used_context_lines = False
             lines = section.split("\n")
             for line in lines:
                 if line.startswith("-") and not line.startswith("---"):
                     changes.append(line)
+                    malicious_lines.append(line)
+                elif line.startswith("+") and not line.startswith("+++"):
+                    changes.append(line)
+                    malicious_lines.append(line)
+
             if not changes:
                 for line in lines[1:]:
                     if line.startswith("+") and not line.startswith("+++"):
                         changes.append(line)
-                changes.append("Context lines used")
+                        malicious_lines.append(line)
+                used_context_lines = True
             else:
                 changes.append("Minus lines used")
 
             if i < len(filenames):
                 filename = filenames[i]
-                file_changes[filename] = changes
+                file_changes[filename] = {
+                    "changes": changes,
+                    "malicious_lines": malicious_lines,
+                    "used_context_lines": used_context_lines,
+                }
             else:
                 logging.warning(
                     f"More diff sections than filenames. Extra changes: {changes}"

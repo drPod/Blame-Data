@@ -79,19 +79,24 @@ def process_commits(input_file, blame_output_file):
                 logging.warning(f"No patch info found for commit: {commit_id}")
                 continue
 
-            malicious_files = set(
-                patch_info.keys()
-            )  # All files with changes are considered malicious
+            malicious_files = list(patch_info.keys())
             used_context_lines = any(
-                "Context lines used" in changes for changes in patch_info.values()
+                file_info["used_context_lines"] for file_info in patch_info.values()
             )
 
             commit_data = {
                 "cve_id": cve_id,
                 "project_name": project_name,
                 "commit_id": commit_id,
-                "malicious_files": list(malicious_files),
+                "malicious_files": malicious_files,
+                "file_changes": {},
             }
+
+            for filename, file_info in patch_info.items():
+                commit_data["file_changes"][filename] = {
+                    "malicious_lines": file_info["malicious_lines"],
+                    "used_context_lines": file_info["used_context_lines"],
+                }
 
             row["malicious_files"] = ",".join(malicious_files)
             row["used_context_lines"] = "Yes" if used_context_lines else "No"
