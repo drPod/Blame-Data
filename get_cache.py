@@ -66,26 +66,19 @@ def get_patch_info(commit_url):
                 patch_file.write(patch_content)
             logging.info(f"Saved patch to: {cached_patch_path}")
 
-        file_changes = {}  # Initialize a dictionary to hold the file changes
+        file_changes = {}
 
-        # Collect all filenames first
-        filenames = []
-        for line in patch_content.split("\n"):
-            if line.startswith("diff --git"):
-                filename = line.split()[-2].lstrip("a/")
-                filenames.append(filename)
-                file_changes[filename] = []  # Initialize an empty list for each file
-
-        # Process changes
-        for i, section in enumerate(patch_content.split("diff --git")[1:]):
+        for section in patch_content.split("diff --git")[1:]:
+            lines = section.split("\n")
+            filename = lines[0].split()[-1].lstrip("b/")
             changes = []
             malicious_lines = []
             context_lines = []
             used_context_lines = False
-            lines = section.split("\n")
             in_hunk = False
+            added_line_index = -1
 
-            for line in lines:
+            for i, line in enumerate(lines):
                 if line.startswith("@@"):
                     in_hunk = True
                     context_lines = []
@@ -95,30 +88,25 @@ def get_patch_info(commit_url):
                         changes.append(line)
                     elif line.startswith("+"):
                         changes.append(line)
+                        added_line_index = i
                     else:
                         context_lines.append(line)
 
-            if not malicious_lines:
+            if not malicious_lines and added_line_index != -1:
                 used_context_lines = True
-                for line in lines:
-                    if line.startswith("+") and not line.startswith("+++"):
-                        malicious_lines = context_lines + [line]
-                        changes.extend(malicious_lines)
-                        break
-                    elif not line.startswith(("+++", "---", "@@")):
-                        context_lines.append(line)
+                start = max(0, added_line_index - 3)
+                end = min(len(lines), added_line_index + 3)
+                malicious_lines = [
+                    line
+                    for line in lines[start:end]
+                    if not line.startswith(("+", "@@", "diff", "index"))
+                ]
 
-            if i < len(filenames):
-                filename = filenames[i]
-                file_changes[filename] = {
-                    "changes": changes,
-                    "malicious_lines": malicious_lines,
-                    "used_context_lines": used_context_lines,
-                }
-            else:
-                logging.warning(
-                    f"More diff sections than filenames. Extra changes: {changes}"
-                )
+            file_changes[filename] = {
+                "changes": changes,
+                "malicious_lines": malicious_lines,
+                "used_context_lines": used_context_lines,
+            }
 
         logging.info(f"Found {len(file_changes)} files in patch")
         logging.info(f"FILE CHANGES: {file_changes}")
