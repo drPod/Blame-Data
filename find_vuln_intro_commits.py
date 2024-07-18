@@ -11,6 +11,7 @@ from constants import (
     COMMIT_METADATA_DIR,
     VULNERABILITY_PATCHES_DIR,
     PATCH_CACHE_DIR,
+    VULNERABILITY_INTRO_METADATA_DIR,
     loggingConfig,
 )
 from ensure_directories import ensure_dirs
@@ -91,6 +92,19 @@ def analyze_vulnerabilities():
             continue
 
         cve_id = cve_file[:-5]  # Remove .json extension
+
+        # Create CVE-specific directory in VULNERABILITY_INTRO_METADATA_DIR
+        cve_output_dir = os.path.join(VULNERABILITY_INTRO_METADATA_DIR, cve_id)
+        os.makedirs(cve_output_dir, exist_ok=True)
+
+        # Check if this CVE has already been processed
+        processed_flag_file = os.path.join(
+            VULNERABILITY_INTRO_METADATA_DIR, f"{cve_id}_processed"
+        )
+        if os.path.exists(processed_flag_file):
+            logging.info(f"CVE {cve_id} has already been processed. Skipping.")
+            continue
+
         cve_output_dir = os.path.join(VULNERABILITY_PATCHES_DIR, cve_id)
         os.makedirs(cve_output_dir, exist_ok=True)
 
@@ -179,6 +193,13 @@ def analyze_vulnerabilities():
 
         if not cve_has_patches:
             logging.warning(f"No patches were generated for CVE {cve_id}")
+        if cve_has_patches:
+            # Create a flag file to indicate that this CVE has been processed
+            with open(
+                os.path.join(VULNERABILITY_INTRO_METADATA_DIR, f"{cve_id}_processed"),
+                "w",
+            ) as f:
+                f.write("")
 
 
 if __name__ == "__main__":

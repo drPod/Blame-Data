@@ -6,6 +6,7 @@ from constants import (
     REPO_CACHE_DIR,
     COMMIT_METADATA_DIR,
     VULNERABILITY_PATCHES_DIR,
+    VULNERABILITY_INTRO_METADATA_DIR,
 )
 from constants import loggingConfig
 
@@ -18,6 +19,7 @@ def ensure_dirs():
         REPO_CACHE_DIR,
         COMMIT_METADATA_DIR,
         VULNERABILITY_PATCHES_DIR,
+        VULNERABILITY_INTRO_METADATA_DIR,
     ]:
         os.makedirs(directory, exist_ok=True)
         logging.info(f"Directory {directory} exists.")
