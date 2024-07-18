@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from git import Repo
+from git import Repo, GitCommandError
 from tqdm import tqdm
 import requests
 import csv
@@ -29,15 +29,22 @@ def get_repo_url(commit_id):
     return None
 
 
-def get_removed_lines(patch_content):
-    removed_lines = []
-    for line in patch_content.split("\n"):
-        if line.startswith("-") and not line.startswith("---"):
-            removed_lines.append(line[1:].strip())
-    return removed_lines
+def get_lines_to_blame(patch_content):
+    lines_to_blame = []
+    lines = patch_content.split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith("+") and not line.startswith("+++"):
+            # Get context lines (up to 3 lines before and after)
+            start = max(0, i - 3)
+            end = min(len(lines), i + 4)
+            context = [
+                l.strip() for l in lines[start:end] if not l.startswith(("+", "-", "@"))
+            ]
+            lines_to_blame.extend(context)
+    return list(set(lines_to_blame))  # Remove duplicates
 
 
-def blame_removed_lines(repo, file_path, removed_lines, security_patch_commit):
+def blame_lines(repo, file_path, lines_to_blame, security_patch_commit):
     try:
         # Get the parent commit of the security patch
         parent_commit = repo.commit(security_patch_commit + "^")
@@ -45,7 +52,7 @@ def blame_removed_lines(repo, file_path, removed_lines, security_patch_commit):
         # Blame on the parent commit
         blame = repo.blame(parent_commit, file_path)
         vuln_introducing_commits = set()
-        for line in removed_lines:
+        for line in lines_to_blame:
             for commit, lines in blame:
                 if line in [l.strip() for l in lines]:
                     # Only add commit if it's an ancestor of the security patch
@@ -56,9 +63,11 @@ def blame_removed_lines(repo, file_path, removed_lines, security_patch_commit):
         vuln_introducing_commits.discard(security_patch_commit)
 
         return list(vuln_introducing_commits)
+    except GitCommandError as e:
+        logging.error(f"Git error in blame_lines for {file_path}: {str(e)}")
     except Exception as e:
-        logging.error(f"Error in blame_removed_lines for {file_path}: {str(e)}")
-        return []
+        logging.error(f"Error in blame_lines for {file_path}: {str(e)}")
+    return []
 
 
 def get_patch_content(commit_url):
@@ -87,12 +96,19 @@ def analyze_vulnerabilities():
 
         input_path = os.path.join(COMMIT_METADATA_DIR, cve_file)
 
-        with open(input_path, "r") as f:
-            security_patch_data = json.load(f)
+        try:
+            with open(input_path, "r") as f:
+                security_patch_data = json.load(f)
+        except json.JSONDecodeError:
+            logging.error(f"Failed to parse JSON for {cve_id}. Skipping.")
+            continue
 
-        commit_id = security_patch_data["commit_id"]
+        commit_id = security_patch_data.get("commit_id")
+        if not commit_id:
+            logging.warning(f"No commit_id found for {cve_id}. Skipping.")
+            continue
+
         repo_url = get_repo_url(commit_id)
-
         if not repo_url:
             logging.warning(
                 f"No repo_url found for {cve_id}, commit {commit_id}. Skipping."
@@ -115,17 +131,28 @@ def analyze_vulnerabilities():
         with open(patch_file, "r") as f:
             patch_content = f.read()
 
-        # Extract file paths and removed lines from the patch
+        # Extract file paths and lines to blame from the patch
         file_patches = re.split(r"diff --git ", patch_content)[
             1:
         ]  # Split patch into per-file sections
+        cve_has_patches = False
         for file_patch in file_patches:
-            file_path = file_patch.split(" b/")[1].split("\n")[0]
-            removed_lines = get_removed_lines(file_patch)
+            match = re.search(r"a/(.*) b/(.*)", file_patch)
+            if not match:
+                logging.warning(
+                    f"Could not extract file path from patch for {cve_id}. Skipping this file."
+                )
+                continue
+            file_path = match.group(2)
+            lines_to_blame = get_lines_to_blame(file_patch)
 
-            vuln_commits = blame_removed_lines(
-                repo, file_path, removed_lines, commit_id
-            )
+            if not lines_to_blame:
+                logging.info(
+                    f"No lines to blame found for {file_path} in {cve_id}. Skipping this file."
+                )
+                continue
+
+            vuln_commits = blame_lines(repo, file_path, lines_to_blame, commit_id)
 
             for vuln_commit in vuln_commits:
                 commit_url = f"{repo_url}/commit/{vuln_commit}"
@@ -135,6 +162,7 @@ def analyze_vulnerabilities():
                     logging.info(
                         f"Patch for CVE {cve_id}, commit {vuln_commit} already exists. Skipping."
                     )
+                    cve_has_patches = True
                     continue
 
                 vuln_patch_content = get_patch_content(commit_url)
@@ -143,6 +171,14 @@ def analyze_vulnerabilities():
                     with open(output_file, "w") as f:
                         f.write(vuln_patch_content)
                     logging.info(f"Saved patch for CVE {cve_id}, commit {vuln_commit}")
+                    cve_has_patches = True
+                else:
+                    logging.warning(
+                        f"Failed to get patch content for {cve_id}, commit {vuln_commit}"
+                    )
+
+        if not cve_has_patches:
+            logging.warning(f"No patches were generated for CVE {cve_id}")
 
 
 if __name__ == "__main__":
