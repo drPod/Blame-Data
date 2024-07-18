@@ -1,14 +1,24 @@
 import os
 import logging
 
-from constants import PATCH_CACHE_DIR, REPO_CACHE_DIR, COMMIT_METADATA_DIR
+from constants import (
+    PATCH_CACHE_DIR,
+    REPO_CACHE_DIR,
+    COMMIT_METADATA_DIR,
+    VULNERABILITY_PATCHES_DIR,
+)
 from constants import loggingConfig
 
 
 def ensure_dirs():
     """Ensure all necessary directories exist."""
     loggingConfig()
-    for directory in [PATCH_CACHE_DIR, REPO_CACHE_DIR, COMMIT_METADATA_DIR]:
+    for directory in [
+        PATCH_CACHE_DIR,
+        REPO_CACHE_DIR,
+        COMMIT_METADATA_DIR,
+        VULNERABILITY_PATCHES_DIR,
+    ]:
         os.makedirs(directory, exist_ok=True)
         logging.info(f"Directory {directory} exists.")
     logging.info("All directories exist.")
