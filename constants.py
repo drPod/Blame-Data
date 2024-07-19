@@ -8,6 +8,8 @@ VULNERABILITY_PATCHES_DIR = "vulnerability_patches"
 VULNERABILITY_INTRO_METADATA_DIR = (
     "vulnerability_intro_metadata"  # vulnerability introducing metadata
 )
+BENIGN_COMMITS_DIR = "benign_commits"
+BENIGN_PATCHES_DIR = "benign_patches"
 
 
 def loggingConfig():

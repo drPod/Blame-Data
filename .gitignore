@@ -5,5 +5,7 @@ malicious_commit_analysis.log
 commits_with_blame_data.csv
 .DS_Store
 /__pycache__
-vulnerability_patches
+/vulnerability_patches
 /vulnerability_intro_metadata
+/benign_commits
+/benign_patches
