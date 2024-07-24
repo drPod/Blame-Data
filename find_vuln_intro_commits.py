@@ -90,6 +90,18 @@ def get_patch_content(commit_url):
         return None
 
 
+def fetch_and_save_patch(commit_id, repo_url):
+    commit_url = f"{repo_url}/commit/{commit_id}"
+    patch_content = get_patch_content(commit_url)
+    if patch_content:
+        patch_file = os.path.join(PATCH_CACHE_DIR, f"{commit_id}.patch")
+        with open(patch_file, "w") as f:
+            f.write(patch_content)
+        logging.info(f"Fetched and saved patch for commit {commit_id}")
+        return patch_file
+    return None
+
+
 def analyze_vulnerabilities():
     ensure_dirs()
 
@@ -149,13 +161,18 @@ def analyze_vulnerabilities():
             logging.error(f"Failed to get or create repo for {repo_url}. Skipping.")
             continue
 
-        # Get the patch file from patch_cache
+        # Get the patch file from patch_cache or fetch it if missing
         patch_file = os.path.join(PATCH_CACHE_DIR, f"{commit_id}.patch")
         if not os.path.exists(patch_file):
-            logging.warning(
-                f"No patch file found for {cve_id}, commit {commit_id}. Skipping."
+            logging.info(
+                f"Patch file not found for {cve_id}, commit {commit_id}. Attempting to fetch."
             )
-            continue
+            patch_file = fetch_and_save_patch(commit_id, repo_url)
+            if not patch_file:
+                logging.warning(
+                    f"Failed to fetch patch for {cve_id}, commit {commit_id}. Skipping."
+                )
+                continue
 
         with open(patch_file, "r") as f:
             patch_content = f.read()
@@ -210,10 +227,7 @@ def analyze_vulnerabilities():
             logging.warning(f"No patches were generated for CVE {cve_id}")
         if cve_has_patches:
             # Create a flag file to indicate that this CVE has been processed
-            with open(
-                os.path.join(VULNERABILITY_INTRO_METADATA_DIR, f"{cve_id}_processed"),
-                "w",
-            ) as f:
+            with open(processed_flag_file, "w") as f:
                 f.write("")
 
 
