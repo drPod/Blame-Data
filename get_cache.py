@@ -1,7 +1,8 @@
 import os
 import logging
 import requests
-from git import Repo
+from git import Repo, GitCommandError
+import shutil
 
 from constants import REPO_CACHE_DIR, PATCH_CACHE_DIR
 from constants import loggingConfig
@@ -18,24 +19,45 @@ def get_or_create_repo(repo_url):
     loggingConfig()
     repo_name = repo_url.split("/")[-1]
     repo_path = os.path.join(REPO_CACHE_DIR, repo_name)
-    if not os.path.exists(repo_path):
+    git_dir = os.path.join(repo_path, ".git")
+
+    # Check if the .git directory exists and is not empty
+    if os.path.exists(git_dir) and not os.listdir(git_dir):
+        shutil.rmtree(repo_path)
+        logging.info(f"Removed invalid Git repository: {repo_path}")
+
+    if not os.path.exists(git_dir):
         logging.info(f"Cloning repository: {repo_url}")
         try:
-            repo = Repo.clone_from(repo_url, repo_path)
+            repo = Repo.clone_from(repo_url, repo_path, depth=1)
             logging.info(f"Successfully cloned repository: {repo_url}")
             return repo
+        except GitCommandError as e:
+            logging.error(f"Git error while cloning repository {repo_url}: {str(e)}")
+            return None
         except Exception as e:
-            logging.error(f"Error cloning repository {repo_url}: {str(e)}")
+            logging.error(
+                f"Unexpected error while cloning repository {repo_url}: {str(e)}"
+            )
             return None
     else:
         try:
             repo = Repo(repo_path)
-            repo.remotes.origin.pull()
+            logging.info(f"Fetching updates for repository: {repo_url}")
+            repo.git.fetch("--all")
+            repo.git.reset(
+                "--hard", "origin/master"
+            )  # or 'origin/main' if that's the default branch
             logging.info(f"Successfully updated repository: {repo_url}")
             return repo
+        except GitCommandError as e:
+            logging.error(
+                f"Git error while updating repository at {repo_path}: {str(e)}"
+            )
+            return None
         except Exception as e:
             logging.error(
-                f"Error opening or updating repository at {repo_path}: {str(e)}"
+                f"Unexpected error while updating repository at {repo_path}: {str(e)}"
             )
             return None
 
