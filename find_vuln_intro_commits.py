@@ -18,6 +18,14 @@ from ensure_directories import ensure_dirs
 from get_cache import get_or_create_repo
 
 CSV_FILE = "commits_with_parent_ids.csv"
+CVES_TO_PROCESS_FILE = "CVEs_to_process.txt"
+
+
+def read_cves_to_process():
+    with open(CVES_TO_PROCESS_FILE, "r") as f:
+        cves = f.read().splitlines()
+    # Remove the last line and any empty lines
+    return [cve.strip() for cve in cves[:-1] if cve.strip()]
 
 
 def get_repo_url(commit_id):
@@ -85,10 +93,13 @@ def get_patch_content(commit_url):
 def analyze_vulnerabilities():
     ensure_dirs()
 
-    for cve_file in tqdm(
-        os.listdir(COMMIT_METADATA_DIR), desc="Analyzing vulnerabilities"
-    ):
+    # Read CVEs to process once at the beginning
+    cves_to_process = read_cves_to_process()
+    logging.info(f"Found {len(cves_to_process)} CVEs to process")
+
+    for cve_file in tqdm(cves_to_process, desc="Analyzing vulnerabilities"):
         if not cve_file.endswith(".json"):
+            logging.warning(f"Skipping {cve_file} as it doesn't end with .json")
             continue
 
         cve_id = cve_file[:-5]  # Remove .json extension
@@ -109,6 +120,10 @@ def analyze_vulnerabilities():
         os.makedirs(cve_output_dir, exist_ok=True)
 
         input_path = os.path.join(COMMIT_METADATA_DIR, cve_file)
+
+        if not os.path.exists(input_path):
+            logging.error(f"File not found: {input_path}. Skipping.")
+            continue
 
         try:
             with open(input_path, "r") as f:
