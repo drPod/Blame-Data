@@ -15,7 +15,7 @@ def get_cached_patch_path(commit_url):
 
 
 def get_or_create_repo(repo_url):
-    """Get or create a repository object."""
+    """Get or create a repository object with full history."""
     loggingConfig()
     repo_name = repo_url.split("/")[-1]
     repo_path = os.path.join(REPO_CACHE_DIR, repo_name)
@@ -29,7 +29,10 @@ def get_or_create_repo(repo_url):
     if not os.path.exists(git_dir):
         logging.info(f"Cloning repository: {repo_url}")
         try:
-            repo = Repo.clone_from(repo_url, repo_path, depth=1)
+            # Clone with full history and all branches
+            repo = Repo.clone_from(
+                repo_url, repo_path, multi_options=["--no-single-branch"]
+            )
             logging.info(f"Successfully cloned repository: {repo_url}")
             return repo
         except GitCommandError as e:
@@ -44,10 +47,20 @@ def get_or_create_repo(repo_url):
         try:
             repo = Repo(repo_path)
             logging.info(f"Fetching updates for repository: {repo_url}")
+
+            # Fetch all branches and tags
             repo.git.fetch("--all")
-            repo.git.reset(
-                "--hard", "origin/master"
-            )  # or 'origin/main' if that's the default branch
+            repo.git.fetch("--tags")
+
+            # Determine the default branch
+            default_branch = repo.git.symbolic_ref(
+                "--short", "refs/remotes/origin/HEAD"
+            ).strip()
+            default_branch = default_branch.split("/")[-1]  # Extract branch name
+
+            # Reset to the default branch
+            repo.git.reset("--hard", f"origin/{default_branch}")
+
             logging.info(f"Successfully updated repository: {repo_url}")
             return repo
         except GitCommandError as e:

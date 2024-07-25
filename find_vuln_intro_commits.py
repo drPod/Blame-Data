@@ -55,28 +55,61 @@ def get_lines_to_blame(patch_content):
 
 def blame_lines(repo, file_path, lines_to_blame, security_patch_commit):
     try:
+        # Try to find the commit in all branches
+        commit = find_commit_in_all_branches(repo, security_patch_commit)
+        if not commit:
+            logging.error(f"Commit {security_patch_commit} not found in any branch")
+            return []
+
         # Get the parent commit of the security patch
-        parent_commit = repo.commit(security_patch_commit + "^")
+        parent_commit = commit.parents[0] if commit.parents else None
+        if not parent_commit:
+            logging.error(f"No parent commit found for {security_patch_commit}")
+            return []
 
         # Blame on the parent commit
-        blame = repo.blame(parent_commit, file_path)
+        blame = repo.git.blame("-l", parent_commit.hexsha, "--", file_path).splitlines()
         vuln_introducing_commits = set()
+
         for line in lines_to_blame:
-            for commit, lines in blame:
-                if line in [l.strip() for l in lines]:
+            for blame_line in blame:
+                if line.strip() in blame_line:
+                    commit_hash = blame_line.split()[0]
                     # Only add commit if it's an ancestor of the security patch
-                    if repo.is_ancestor(commit.hexsha, security_patch_commit):
-                        vuln_introducing_commits.add(commit.hexsha)
+                    if repo.is_ancestor(commit_hash, security_patch_commit):
+                        vuln_introducing_commits.add(commit_hash)
 
         # Remove the security patch commit itself, if present
         vuln_introducing_commits.discard(security_patch_commit)
 
         return list(vuln_introducing_commits)
     except GitCommandError as e:
-        logging.error(f"Git error in blame_lines for {file_path}: {str(e)}")
+        if "no such path" in str(e).lower():
+            logging.warning(
+                f"File {file_path} not found in commit {parent_commit.hexsha}"
+            )
+        else:
+            logging.error(f"Git error in blame_lines for {file_path}: {str(e)}")
     except Exception as e:
         logging.error(f"Error in blame_lines for {file_path}: {str(e)}")
     return []
+
+
+def find_commit_in_all_branches(repo, commit_hash):
+    try:
+        # First, try to find the commit directly
+        commit = repo.commit(commit_hash)
+        return commit
+    except GitCommandError:
+        # If not found, search in all branches
+        for branch in repo.branches:
+            try:
+                repo.git.checkout(branch.name)
+                commit = repo.commit(commit_hash)
+                return commit
+            except GitCommandError:
+                continue
+    return None
 
 
 def get_patch_content(commit_url):
@@ -159,6 +192,17 @@ def analyze_vulnerabilities():
         repo = get_or_create_repo(repo_url)
         if repo is None:
             logging.error(f"Failed to get or create repo for {repo_url}. Skipping.")
+            continue
+
+        # Reset and update the repo before processing each CVE
+        try:
+            repo.git.reset("--hard")
+            repo.git.clean("-xdf")
+            repo.git.fetch("--all")
+            repo.remotes.origin.pull()
+            logging.info(f"Repository reset and updated for {cve_id}")
+        except GitCommandError as e:
+            logging.error(f"Git error in repo reset for {repo_url}: {str(e)}")
             continue
 
         # Get the patch file from patch_cache or fetch it if missing
