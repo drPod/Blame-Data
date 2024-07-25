@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import random
 import logging
@@ -78,64 +79,84 @@ def collect_benign_commits():
     os.makedirs(BENIGN_COMMITS_DIR, exist_ok=True)
     os.makedirs(BENIGN_PATCHES_DIR, exist_ok=True)
 
-    logging.info(f"Starting to process CVEs from {VULNERABILITY_INTRO_METADATA_DIR}")
-    for cve_dir in tqdm(
-        os.listdir(VULNERABILITY_INTRO_METADATA_DIR), desc="Processing CVEs"
-    ):
+    cve_dirs = [
+        d
+        for d in os.listdir(VULNERABILITY_INTRO_METADATA_DIR)
+        if os.path.isdir(os.path.join(VULNERABILITY_INTRO_METADATA_DIR, d))
+    ]
+    total_cves = len(cve_dirs)
+
+    print(
+        f"Starting to process {total_cves} CVEs from {VULNERABILITY_INTRO_METADATA_DIR}"
+    )
+
+    for cve_index, cve_dir in enumerate(cve_dirs, 1):
         cve_path = os.path.join(VULNERABILITY_INTRO_METADATA_DIR, cve_dir)
-        if not os.path.isdir(cve_path):
-            logging.debug(f"Skipping non-directory: {cve_path}")
-            continue
 
-        logging.info(f"Processing CVE directory: {cve_dir}")
-        for vuln_file in os.listdir(cve_path):
-            if not vuln_file.endswith(".json"):
-                logging.debug(f"Skipping non-JSON file: {vuln_file}")
-                continue
+        print(f"\nProcessing CVE directory: {cve_dir} ({cve_index}/{total_cves})")
+        sys.stdout.flush()  # Ensure the print statement is displayed immediately
 
-            logging.info(f"Processing vulnerability file: {vuln_file}")
+        # Create CVE-specific output directories
+        cve_benign_commits_dir = os.path.join(BENIGN_COMMITS_DIR, cve_dir)
+        cve_benign_patches_dir = os.path.join(BENIGN_PATCHES_DIR, cve_dir)
+        os.makedirs(cve_benign_commits_dir, exist_ok=True)
+        os.makedirs(cve_benign_patches_dir, exist_ok=True)
+
+        vuln_files = [f for f in os.listdir(cve_path) if f.endswith(".json")]
+        for vuln_index, vuln_file in enumerate(vuln_files, 1):
+            print(
+                f"  Processing vulnerability file: {vuln_file} ({vuln_index}/{len(vuln_files)})"
+            )
+            sys.stdout.flush()
+
             with open(os.path.join(cve_path, vuln_file), "r") as f:
                 vuln_data = json.load(f)
 
             commit_id = vuln_data.get("commit_id")
             if not commit_id:
-                logging.warning(f"No commit_id found in {vuln_file}. Skipping.")
+                print(f"    No commit_id found in {vuln_file}. Skipping.")
                 continue
 
             repo_url, project_name = get_repo_info(commit_id)
             if not repo_url or not project_name:
-                logging.warning(f"No repo found for commit {commit_id}. Skipping.")
+                print(f"    No repo found for commit {commit_id}. Skipping.")
                 continue
 
             repo_path = os.path.join(REPO_CACHE_DIR, project_name)
             if not os.path.exists(repo_path):
-                logging.warning(
-                    f"Repository not found in cache for {project_name}. Skipping."
+                print(
+                    f"    Repository not found in cache for {project_name}. Skipping."
                 )
                 continue
 
-            logging.info(f"Processing repo: {project_name}")
+            print(f"    Processing repo: {project_name}")
+            sys.stdout.flush()
+
             repo = Repo(repo_path)
             exclude_commits = [commit_id]
 
+            benign_commits_processed = 0
             for i in range(BENIGN_COMMITS_PER_VULN):
                 benign_commit = get_random_commit(repo, exclude_commits)
                 if not benign_commit:
-                    logging.info(f"No more valid commits for {project_name}. Skipping.")
+                    print(f"      No more valid commits for {project_name}. Skipping.")
                     break
 
                 output_file = os.path.join(
-                    BENIGN_COMMITS_DIR, f"{project_name}_{benign_commit.hexsha}.json"
+                    cve_benign_commits_dir,
+                    f"{project_name}_{benign_commit.hexsha}.json",
                 )
                 patch_file = os.path.join(
-                    BENIGN_PATCHES_DIR, f"{project_name}_{benign_commit.hexsha}.patch"
+                    cve_benign_patches_dir,
+                    f"{project_name}_{benign_commit.hexsha}.patch",
                 )
 
                 if os.path.exists(output_file) and os.path.exists(patch_file):
-                    logging.info(
-                        f"Benign commit {benign_commit.hexsha} for {project_name} already processed. Skipping."
+                    print(
+                        f"      Benign commit {benign_commit.hexsha} for {project_name} already processed. Skipping."
                     )
                     exclude_commits.append(benign_commit.hexsha)
+                    benign_commits_processed += 1
                     continue
 
                 commit_url = f"{repo_url}/commit/{benign_commit.hexsha}"
@@ -148,7 +169,7 @@ def collect_benign_commits():
                     patch_info = get_patch_info(patch_content)
 
                     benign_data = {
-                        "cve_id": "BENIGN",
+                        "cve_id": cve_dir,
                         "project_name": project_name,
                         "commit_id": benign_commit.hexsha,
                         "file_changes": patch_info,
@@ -157,15 +178,27 @@ def collect_benign_commits():
                     with open(output_file, "w") as f:
                         json.dump(benign_data, f, indent=2)
 
-                    logging.info(
-                        f"Processed benign commit {benign_commit.hexsha} for {project_name}"
+                    print(
+                        f"      Processed benign commit {benign_commit.hexsha} for {project_name}"
                     )
+                    benign_commits_processed += 1
                 else:
-                    logging.warning(
-                        f"Failed to get patch for commit {benign_commit.hexsha} of {project_name}"
+                    print(
+                        f"      Failed to get patch for commit {benign_commit.hexsha} of {project_name}"
                     )
 
                 exclude_commits.append(benign_commit.hexsha)
+                sys.stdout.flush()
+
+            print(
+                f"    Completed processing {benign_commits_processed} benign commits for {project_name}"
+            )
+            sys.stdout.flush()
+
+        print(f"Completed processing CVE: {cve_dir}")
+        sys.stdout.flush()
+
+    print("\nFinished processing all CVEs.")
 
 
 if __name__ == "__main__":
