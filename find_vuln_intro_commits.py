@@ -53,46 +53,69 @@ def get_lines_to_blame(patch_content):
     return list(set(lines_to_blame))  # Remove duplicates
 
 
-def blame_lines(repo, file_path, lines_to_blame, security_patch_commit):
+def is_valid_commit(repo, commit_hash):
     try:
-        # Try to find the commit in all branches
-        commit = find_commit_in_all_branches(repo, security_patch_commit)
-        if not commit:
-            logging.error(f"Commit {security_patch_commit} not found in any branch")
+        repo.git.rev_parse("--verify", commit_hash)
+        return True
+    except GitCommandError:
+        return False
+
+
+def blame_lines(repo, file_path, lines_to_blame, security_patch_commit):
+    clean_security_patch_commit = security_patch_commit.lstrip("^")
+    try:
+        # Get the parent commit of the security patch
+        try:
+            parent_commit = repo.commit(clean_security_patch_commit + "^")
+        except GitCommandError:
+            logging.error(f"No parent commit found for {clean_security_patch_commit}")
             return []
 
-        # Get the parent commit of the security patch
-        parent_commit = commit.parents[0] if commit.parents else None
-        if not parent_commit:
-            logging.error(f"No parent commit found for {security_patch_commit}")
+        # Validate parent_commit
+        if not is_valid_commit(repo, parent_commit.hexsha):
+            logging.error(f"Invalid parent commit: {parent_commit.hexsha}")
             return []
 
         # Blame on the parent commit
-        blame = repo.git.blame("-l", parent_commit.hexsha, "--", file_path).splitlines()
+        try:
+            blame = repo.git.blame(
+                "-l", parent_commit.hexsha, "--", file_path
+            ).splitlines()
+        except GitCommandError as e:
+            if "no such path" in str(e).lower():
+                logging.warning(
+                    f"File {file_path} not found in commit {parent_commit.hexsha}"
+                )
+            else:
+                logging.error(f"Git error in blame for {file_path}: {str(e)}")
+            return []
+
         vuln_introducing_commits = set()
 
         for line in lines_to_blame:
             for blame_line in blame:
                 if line.strip() in blame_line:
                     commit_hash = blame_line.split()[0]
-                    # Only add commit if it's an ancestor of the security patch
-                    if repo.is_ancestor(commit_hash, security_patch_commit):
-                        vuln_introducing_commits.add(commit_hash)
+                    # Clean the commit hash by removing leading carets
+                    clean_commit_hash = commit_hash.lstrip("^")
+                    if is_valid_commit(repo, clean_commit_hash):
+                        try:
+                            if repo.is_ancestor(
+                                clean_commit_hash, security_patch_commit
+                            ):
+                                vuln_introducing_commits.add(clean_commit_hash)
+                        except GitCommandError as e:
+                            logging.error(
+                                f"Error checking ancestry for {clean_commit_hash}: {str(e)}"
+                            )
 
         # Remove the security patch commit itself, if present
         vuln_introducing_commits.discard(security_patch_commit)
 
         return list(vuln_introducing_commits)
-    except GitCommandError as e:
-        if "no such path" in str(e).lower():
-            logging.warning(
-                f"File {file_path} not found in commit {parent_commit.hexsha}"
-            )
-        else:
-            logging.error(f"Git error in blame_lines for {file_path}: {str(e)}")
     except Exception as e:
-        logging.error(f"Error in blame_lines for {file_path}: {str(e)}")
-    return []
+        logging.error(f"Unexpected error in blame_lines for {file_path}: {str(e)}")
+        return []
 
 
 def find_commit_in_all_branches(repo, commit_hash):
