@@ -1,5 +1,4 @@
 import logging
-import os
 
 PATCH_CACHE_DIR = "patch_cache"
 REPO_CACHE_DIR = "repo_cache"
@@ -11,11 +10,21 @@ VULNERABILITY_INTRO_METADATA_DIR = (
 BENIGN_COMMITS_DIR = "benign_commits"
 BENIGN_PATCHES_DIR = "benign_patches"
 
+TOKENIZED_BENIGN_COMMITS_DIR = "tokenized_benign_commits"
+TOKENIZED_VULN_INTRO_COMMITS_DIR = "tokenized_vuln_intro_commits"
+
 
 def loggingConfig():
-    # Set up logging
     logging.basicConfig(
         filename="malicious_commit_analysis.log",
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
+
+
+def tokenization_loggingConfig():
+    logging.basicConfig(
+        filename="tokenization.log",
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
     )

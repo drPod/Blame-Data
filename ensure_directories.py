@@ -9,6 +9,8 @@ from constants import (
     VULNERABILITY_INTRO_METADATA_DIR,
     BENIGN_COMMITS_DIR,
     BENIGN_PATCHES_DIR,
+    TOKENIZED_BENIGN_COMMITS_DIR,
+    TOKENIZED_VULN_INTRO_COMMITS_DIR,
 )
 from constants import loggingConfig
 
@@ -24,10 +26,9 @@ def ensure_dirs():
         VULNERABILITY_INTRO_METADATA_DIR,
         BENIGN_COMMITS_DIR,
         BENIGN_PATCHES_DIR,
+        TOKENIZED_BENIGN_COMMITS_DIR,
+        TOKENIZED_VULN_INTRO_COMMITS_DIR,
     ]:
         os.makedirs(directory, exist_ok=True)
         logging.info(f"Directory {directory} exists.")
     logging.info("All directories exist.")
-
-
-# The function ensure_dirs() creates the directories specified in the constants file if they do not already exist. This function is used in the process_commits.py script to ensure that the required directories are available before processing the commits.
