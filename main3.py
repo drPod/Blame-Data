@@ -3,6 +3,7 @@ import json
 import logging
 from constants import tokenization_loggingConfig
 from file_type_detector import determine_file_type
+from tokenizer import tokenize_directory
 from constants import (
     BENIGN_COMMITS_DIR,
     VULNERABILITY_INTRO_METADATA_DIR,
@@ -40,19 +41,17 @@ def process_filetypes(folder_path):
     return all_filetypes
 
 
-def main(folder_path):
-    return process_filetypes(folder_path)
-
-
-if __name__ == "__main__":
+def main():
     tokenization_loggingConfig()
 
     logging.info("PROCESSING VULNERABILITY INTRODUCING COMMITS")
-    vulnerability_results = main(VULNERABILITY_INTRO_METADATA_DIR)
-    with open(TOKENIZED_VULN_INTRO_COMMITS_DIR, "w") as f:
-        json.dump(vulnerability_results, f, indent=2)
+    tokenize_directory(
+        VULNERABILITY_INTRO_METADATA_DIR, TOKENIZED_VULN_INTRO_COMMITS_DIR
+    )
 
     logging.info("PROCESSING BENIGN COMMITS")
-    benign_results = main(BENIGN_COMMITS_DIR)
-    with open(TOKENIZED_BENIGN_COMMITS_DIR, "w") as f:
-        json.dump(benign_results, f, indent=2)
+    tokenize_directory(BENIGN_COMMITS_DIR, TOKENIZED_BENIGN_COMMITS_DIR)
+
+
+if __name__ == "__main__":
+    main()
