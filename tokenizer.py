@@ -1,3 +1,5 @@
+# pip install -r requirements_for_main3.txt
+
 import re
 import json
 import os
@@ -9,21 +11,81 @@ from tokenize_rt import src_to_tokens
 from pygments import lex
 from pygments.lexers import get_lexer_by_name, guess_lexer, get_lexer_for_mimetype
 from pygments.util import ClassNotFound
-from pycparser import c_lexer
-from phply import lexer as php_lexer
+
+# Language-specific tokenizers
+from pycparser import c_parser  # For C
+from clang.cindex import Index, CursorKind  # For C++, Objective-C
+from javalang import tokenize as java_tokenize  # For Java
+from typescript import tokenize as ts_tokenize  # For TypeScript
+from js2py import parse_js  # For JavaScript
+from rubymarshal.reader import UnmarshalReader  # For Ruby
+from xml.etree.ElementTree import XML  # For XML
+from cssutils import parseString  # For CSS
+from sqlparse import parse as sql_parse  # For SQL
+from yaml import safe_load  # For YAML
+from configparser import ConfigParser  # For .ini and some .conf files
+from markdown import markdown  # For Markdown
+
+
+def tokenize_cpp(code: str) -> List[str]:
+    index = Index.create()
+    tu = index.parse("tmp.cpp", args=["-std=c++11"], unsaved_files=[("tmp.cpp", code)])
+    return [token.spelling for token in tu.get_tokens()]
+
+
+def tokenize_typescript(code: str) -> List[str]:
+    return [token.value for token in ts_tokenize(code)]
+
+
+def tokenize_xml(code: str) -> List[str]:
+    return [elem.tag for elem in XML(code)]
+
+
+def tokenize_css(code: str) -> List[str]:
+    return [rule.selectorText for rule in parseString(code).cssRules]
+
+
+def tokenize_sql(code: str) -> List[str]:
+    return [token.value for token in sql_parse(code)]
+
+
+def tokenize_yaml(code: str) -> List[str]:
+    return [key for key in safe_load(code)]
+
+
+def tokenize_ini(code: str) -> List[str]:
+    parser = ConfigParser()
+    parser.read_string(code)
+    return [section for section in parser.sections()]
+
+
+def tokenize_markdown(code: str) -> List[str]:
+    return [token for token in markdown(code)]
+
+
+def tokenize_python(code: str) -> List[str]:
+    return [token.value for token in src_to_tokens(code)]
 
 
 def tokenize_c(code: str) -> List[str]:
-    c_lex = c_lexer.CLexer()
-    c_lex.build()
-    c_lex.input(code)
-    return [tok.value for tok in c_lex]
+    parser = c_parser.CParser()
+    return [token for _, token in parser.parse(code).children()]
 
 
 def tokenize_php(code: str) -> List[str]:
-    php_lex = php_lexer.lexer.clone()
-    php_lex.input(code)
-    return [tok.value for tok in php_lex]
+    return [token.value for token in src_to_tokens(code, "php")]
+
+
+def tokenize_java(code: str) -> List[str]:
+    return [token.value for token in java_tokenize(code)]
+
+
+def tokenize_javascript(code: str) -> List[str]:
+    return [token.value for token in parse_js(code)]
+
+
+def tokenize_ruby(code: str) -> List[str]:
+    return [token for token in UnmarshalReader(code).read()]
 
 
 def tokenize_plain_text(code: str) -> List[str]:
@@ -44,17 +106,95 @@ def get_pygments_lexer(file_type: str, code: str):
 
 
 def tokenize_code(code: str, file_type: str) -> List[str]:
-    if file_type == "text/x-python" or file_type == "python":
-        return [token.src for token in src_to_tokens(code)]
-    elif file_type in ["text/x-csrc", "text/x-chdr", "c"]:
-        return tokenize_c(code)
-    elif file_type in ["text/x-php", "php"]:
-        return tokenize_php(code)
-    elif file_type in ["text", "English text"]:
+    tokenization_loggingConfig()
+    tokenizers = {
+        "text/x-c++src": tokenize_cpp,
+        "text/x-c++hdr": tokenize_cpp,
+        "c++": tokenize_cpp,
+        ".cpp": tokenize_cpp,
+        ".hpp": tokenize_cpp,
+        "text/typescript": tokenize_typescript,
+        "typescript": tokenize_typescript,
+        ".ts": tokenize_typescript,
+        "text/xml": tokenize_xml,
+        "xml": tokenize_xml,
+        ".xml": tokenize_xml,
+        "text/css": tokenize_css,
+        "css": tokenize_css,
+        ".css": tokenize_css,
+        "text/x-sql": tokenize_sql,
+        "sql": tokenize_sql,
+        ".sql": tokenize_sql,
+        "text/yaml": tokenize_yaml,
+        "yaml": tokenize_yaml,
+        ".yaml": tokenize_yaml,
+        "text/x-ini": tokenize_ini,
+        "ini": tokenize_ini,
+        ".ini": tokenize_ini,
+        "text/markdown": tokenize_markdown,
+        "markdown": tokenize_markdown,
+        ".md": tokenize_markdown,
+        "text/x-python": tokenize_python,
+        "python": tokenize_python,
+        ".py": tokenize_python,
+        "text/x-csrc": tokenize_c,
+        "c": tokenize_c,
+        ".c": tokenize_c,
+        "text/x-php": tokenize_php,
+        "php": tokenize_php,
+        ".php": tokenize_php,
+        "text/x-java": tokenize_java,
+        "java": tokenize_java,
+        ".java": tokenize_java,
+        "text/javascript": tokenize_javascript,
+        "javascript": tokenize_javascript,
+        ".js": tokenize_javascript,
+        "text/x-ruby": tokenize_ruby,
+        "ruby": tokenize_ruby,
+        ".rb": tokenize_ruby,
+        "text/plain": tokenize_plain_text,
+        "text": tokenize_plain_text,
+        ".txt": tokenize_plain_text,
+        ".h": tokenize_cpp,
+        "changelog": tokenize_plain_text,
+        "readme": tokenize_plain_text,
+        "license": tokenize_plain_text,
+        "copy": tokenize_plain_text,
+        "copying": tokenize_plain_text,
+        "copyright": tokenize_plain_text,
+        ".jsx": tokenize_javascript,
+        ".tsx": tokenize_typescript,
+        ".conf": tokenize_ini,
+        ".properties": tokenize_ini,
+        ".config": tokenize_ini,
+        ".mdown": tokenize_markdown,
+        ".mkd": tokenize_markdown,
+        ".mkdn": tokenize_markdown,
+        ".mdwn": tokenize_markdown,
+        ".mdtxt": tokenize_markdown,
+        ".mdtext": tokenize_markdown,
+        ".text": tokenize_markdown,
+        ".Rmd": tokenize_markdown,
+        ".rmd": tokenize_markdown,
+        ".rst": tokenize_markdown,
+        ".rest": tokenize_markdown,
+        ".txt": tokenize_markdown,
+        ".textile": tokenize_markdown,
+        ".pod": tokenize_markdown,
+    }
+
+    try:
+        if file_type in tokenizers:
+            # Use the appropriate tokenizer
+            return tokenizers[file_type](code)
+        else:
+            # Use Pygments to tokenize the code
+            lexer = get_pygments_lexer(file_type, code)
+            return [token[1] for token in lex(code, lexer)]
+    except Exception as e:
+        logging.error(f"Error tokenizing code: {e}")
+        # If all else fails, tokenize as plain text
         return tokenize_plain_text(code)
-    else:
-        lexer = get_pygments_lexer(file_type, code)
-        return [token[1] for token in lex(code, lexer)]
 
 
 def subtokenize(tokens: List[str]) -> List[str]:
