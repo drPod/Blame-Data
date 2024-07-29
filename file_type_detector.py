@@ -9,6 +9,19 @@ def is_text_file(file_content):
     return all(ord(c) < 128 for c in file_content)
 
 
+def determine_file_type_using_python_magic(file_path, file_content):
+    tokenization_loggingConfig()
+
+    # If mimetype couldn't determine the type, use python-magic
+    logging.info(f"Using python-magic to determine the type of {file_path}")
+    file_type = magic.from_buffer(file_content["added_lines"][0].encode(), mime=True)
+
+    if file_type.startswith("text/") and is_text_file(file_content["added_lines"][0]):
+        return "English text"
+
+    return file_type if file_type else "Unknown"
+
+
 def determine_file_type(file_path, file_content):
     tokenization_loggingConfig()
 
@@ -25,6 +38,16 @@ def determine_file_type(file_path, file_content):
         return "English text"
     elif file_path.lower() == "readme" or file_path.lower().startswith("readme"):
         return "English text"
+    elif file_path.lower().startswith("license"):
+        return "English text"
+    elif file_path.lower().startswith("copy"):
+        return "English text"
+    elif file_path.lower().endswith("makefile"):
+        return "Makefile"
+    elif file_path.lower().endswith("dockerfile"):
+        return "Dockerfile"
+    elif file_path.lower().endswith("txt"):
+        return determine_file_type_using_python_magic(file_path, file_content)
 
     # Use mimetypes to guess the type
     mime_type, _ = mimetypes.guess_type(file_path)
@@ -33,11 +56,4 @@ def determine_file_type(file_path, file_content):
         logging.info(f"Using mimetypes to determine the type of {file_path}")
         return mime_type
 
-    # If mimetype couldn't determine the type, use python-magic
-    logging.info(f"Using python-magic to determine the type of {file_path}")
-    file_type = magic.from_buffer(file_content["added_lines"][0].encode(), mime=True)
-
-    if file_type.startswith("text/") and is_text_file(file_content["added_lines"][0]):
-        return "English text"
-
-    return file_type if file_type else "Unknown"
+    return determine_file_type_using_python_magic(file_path, file_content)
