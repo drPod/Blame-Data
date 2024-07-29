@@ -2,33 +2,50 @@ import os
 import json
 from collections import Counter
 from constants import BENIGN_COMMITS_DIR, VULNERABILITY_INTRO_METADATA_DIR
+from tqdm import tqdm
 
 
 def analyze_file_extensions(directory):
     extension_counter = Counter()
     no_extension_counter = Counter()
 
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            if file.endswith(".json"):
-                file_path = os.path.join(root, file)
-                with open(file_path, "r") as f:
-                    try:
-                        commit_data = json.load(f)
-                        for changed_file in commit_data.get("file_changes", {}).keys():
-                            _, ext = os.path.splitext(changed_file)
-                            if ext:
-                                extension_counter[ext] += 1
-                            else:
-                                filename = os.path.basename(changed_file)
-                                no_extension_counter[filename] += 1
-                    except json.JSONDecodeError:
-                        print(f"Error decoding JSON in file: {file_path}")
+    # Get total number of files for progress bar
+    total_files = sum(
+        [
+            len(files)
+            for r, d, files in os.walk(directory)
+            if any(f.endswith(".json") for f in files)
+        ]
+    )
+
+    with tqdm(
+        total=total_files, desc=f"Analyzing {os.path.basename(directory)}"
+    ) as pbar:
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                if file.endswith(".json"):
+                    file_path = os.path.join(root, file)
+                    with open(file_path, "r") as f:
+                        try:
+                            commit_data = json.load(f)
+                            for changed_file in commit_data.get(
+                                "file_changes", {}
+                            ).keys():
+                                _, ext = os.path.splitext(changed_file)
+                                if ext:
+                                    extension_counter[ext] += 1
+                                else:
+                                    filename = os.path.basename(changed_file)
+                                    no_extension_counter[filename] += 1
+                        except json.JSONDecodeError:
+                            print(f"Error decoding JSON in file: {file_path}")
+                    pbar.update(1)
 
     return extension_counter, no_extension_counter
 
 
 def main():
+    print("Starting analysis...")
     benign_extensions, benign_no_ext = analyze_file_extensions(BENIGN_COMMITS_DIR)
     vuln_extensions, vuln_no_ext = analyze_file_extensions(
         VULNERABILITY_INTRO_METADATA_DIR
