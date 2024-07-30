@@ -2,6 +2,7 @@ import os
 import json
 import logging
 from typing import Dict, Any
+from tqdm import tqdm
 from constants import (
     tokenization_loggingConfig,
     BENIGN_COMMITS_DIR,
@@ -10,7 +11,7 @@ from constants import (
     TOKENIZED_VULN_INTRO_COMMITS_DIR,
 )
 from file_type_detector import determine_file_type
-from tokenizer import tokenize_directory
+from tokenizer import tokenize_file
 from ensure_directories import ensure_dirs
 
 
@@ -53,26 +54,42 @@ class CommitProcessor:
 
         return results
 
-    def process_filetypes(self, folder_path: str) -> Dict[str, Dict[str, str]]:
-        self.logger.info(f"Processing filetypes in folder: {folder_path}")
-        all_filetypes = {}
-
-        try:
-            for filename in os.listdir(folder_path):
-                if filename.endswith(".json"):
-                    json_path = os.path.join(folder_path, filename)
-                    filetype = self.process_json_file(json_path)
-                    all_filetypes[filename] = filetype
-        except OSError as e:
-            self.logger.error(f"Error accessing directory {folder_path}: {str(e)}")
-
-        return all_filetypes
-
     def tokenize_commits(self, input_dir: str, output_dir: str, commit_type: str):
         self.logger.info(f"Tokenizing {commit_type} commits")
         try:
-            tokenize_directory(input_dir, output_dir)
-            self.logger.info(f"Successfully tokenized {commit_type} commits")
+            input_files = []
+            for root, _, files in os.walk(input_dir):
+                for file in files:
+                    if file.endswith(".json"):
+                        input_files.append(os.path.join(root, file))
+
+            total_files = len(input_files)
+            processed_files = 0
+
+            with tqdm(
+                total=total_files, desc=f"Tokenizing {commit_type} commits"
+            ) as pbar:
+                for input_path in input_files:
+                    relative_path = os.path.relpath(input_path, input_dir)
+                    output_path = os.path.join(output_dir, relative_path)
+
+                    # Create output directory if it doesn't exist
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+                    # Check if the output file already exists
+                    if not os.path.exists(output_path):
+                        tokenize_file(input_path, output_path)
+                        processed_files += 1
+                    else:
+                        self.logger.info(
+                            f"Skipping already processed file: {relative_path}"
+                        )
+
+                    pbar.update(1)
+
+            self.logger.info(
+                f"Successfully tokenized {processed_files} out of {total_files} {commit_type} commits"
+            )
         except Exception as e:
             self.logger.error(f"Error tokenizing {commit_type} commits: {str(e)}")
 

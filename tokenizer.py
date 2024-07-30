@@ -23,7 +23,6 @@ from sqlparse import parse as sql_parse  # For SQL
 from yaml import safe_load  # For YAML
 from configparser import ConfigParser  # For .ini and some .conf files
 from markdown import markdown  # For Markdown
-from tokenize import tokenize  # For Python
 
 
 class CodeTokenizer:
@@ -64,9 +63,6 @@ class CodeTokenizer:
             "text/markdown": self.tokenize_markdown,
             "markdown": self.tokenize_markdown,
             ".md": self.tokenize_markdown,
-            "text/x-python": self.tokenize_python,
-            "python": self.tokenize_python,
-            ".py": self.tokenize_python,
             "text/x-csrc": self.tokenize_c,
             "c": self.tokenize_c,
             ".c": self.tokenize_c,
@@ -107,8 +103,6 @@ class CodeTokenizer:
             "text/plain": self.tokenize_plain_text,
             "text": self.tokenize_plain_text,
             ".txt": self.tokenize_plain_text,
-            "text/x-python3": self.tokenize_python,
-            "text/x-python2": self.tokenize_python,
         }
 
     def tokenize_cpp(self, code: str) -> List[str]:
@@ -165,13 +159,6 @@ class CodeTokenizer:
             return [token for token in markdown(code)]
         except Exception as e:
             self.logger.error(f"Error tokenizing Markdown code: {str(e)}")
-            return self.tokenize_plain_text(code)
-
-    def tokenize_python(self, code: str) -> List[str]:
-        try:
-            return [token.string for token in tokenize(code)]
-        except Exception as e:
-            self.logger.error(f"Error tokenizing Python code: {str(e)}")
             return self.tokenize_plain_text(code)
 
     def tokenize_c(self, code: str) -> List[str]:
@@ -279,6 +266,27 @@ class CodeTokenizer:
         )
         return tokenized_commit
 
+    def tokenize_file(self, input_path: str, output_path: str):
+        self.logger.info(f"Tokenizing file: {input_path}")
+        try:
+            with open(input_path, "r") as f:
+                commit_data = json.load(f)
+
+            tokenized_data = self.tokenize_commit(commit_data)
+
+            with open(output_path, "w") as f:
+                json.dump(tokenized_data, f, indent=2)
+
+            self.logger.info(f"Tokenized and saved: {output_path}")
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Error decoding JSON in file {input_path}: {str(e)}")
+        except IOError as e:
+            self.logger.error(f"IO error while processing file {input_path}: {str(e)}")
+        except Exception as e:
+            self.logger.error(
+                f"Unexpected error processing file {input_path}: {str(e)}"
+            )
+
     def tokenize_directory(self, input_dir: str, output_dir: str):
         self.logger.info(f"Tokenizing directory: {input_dir}")
         for root, dirs, files in os.walk(input_dir):
@@ -290,28 +298,12 @@ class CodeTokenizer:
 
                     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-                    try:
-                        with open(input_path, "r") as f:
-                            commit_data = json.load(f)
+                    self.tokenize_file(input_path, output_path)
 
-                        tokenized_data = self.tokenize_commit(commit_data)
 
-                        with open(output_path, "w") as f:
-                            json.dump(tokenized_data, f, indent=2)
-
-                        self.logger.info(f"Tokenized and saved: {output_path}")
-                    except json.JSONDecodeError as e:
-                        self.logger.error(
-                            f"Error decoding JSON in file {input_path}: {str(e)}"
-                        )
-                    except IOError as e:
-                        self.logger.error(
-                            f"IO error while processing file {input_path}: {str(e)}"
-                        )
-                    except Exception as e:
-                        self.logger.error(
-                            f"Unexpected error processing file {input_path}: {str(e)}"
-                        )
+def tokenize_file(input_path: str, output_path: str):
+    tokenizer = CodeTokenizer()
+    tokenizer.tokenize_file(input_path, output_path)
 
 
 def tokenize_directory(input_dir: str, output_dir: str):
