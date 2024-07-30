@@ -9,3 +9,5 @@ commits_with_blame_data.csv
 /vulnerability_intro_metadata
 /benign_commits
 /benign_patches
+/tokenized_vuln_intro_commits
+/tokenized_benign_commits
