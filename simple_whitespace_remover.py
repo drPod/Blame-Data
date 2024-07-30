@@ -1,6 +1,8 @@
 import os
 import json
+import logging
 from multiprocessing import Pool
+from tqdm import tqdm
 from constants import (
     tokenization_loggingConfig,
     BENIGN_COMMITS_DIR,
@@ -9,9 +11,12 @@ from constants import (
     TOKENIZED_VULN_INTRO_COMMITS_DIR,
 )
 
+# Set up logging
+tokenization_loggingConfig()
+logger = logging.getLogger(__name__)
+
 
 def tokenize_line(text):
-    # Split the text by whitespace
     return text.split()
 
 
@@ -37,7 +42,15 @@ def process_commit(commit_data):
 
 def process_file(args):
     input_path, output_path = args
-    print(f"Processing file: {input_path}")
+
+    # Check if the output file already exists and is newer than the input file
+    if os.path.exists(output_path) and os.path.getmtime(output_path) > os.path.getmtime(
+        input_path
+    ):
+        logger.info(f"Skipping already processed file: {input_path}")
+        return
+
+    logger.info(f"Processing file: {input_path}")
     try:
         with open(input_path, "r") as f:
             commit_data = json.load(f)
@@ -48,9 +61,9 @@ def process_file(args):
         with open(output_path, "w") as f:
             json.dump(processed_data, f, indent=2)
 
-        print(f"Processed and saved: {output_path}")
+        logger.info(f"Processed and saved: {output_path}")
     except Exception as e:
-        print(f"Error processing file {input_path}: {str(e)}")
+        logger.error(f"Error processing file {input_path}: {str(e)}")
 
 
 def process_directory(input_dir, output_dir):
@@ -74,7 +87,13 @@ def main():
     all_tasks = benign_tasks + vuln_tasks
 
     with Pool(2) as p:
-        p.map(process_file, all_tasks)
+        list(
+            tqdm(
+                p.imap(process_file, all_tasks),
+                total=len(all_tasks),
+                desc="Processing files",
+            )
+        )
 
 
 if __name__ == "__main__":
