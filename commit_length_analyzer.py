@@ -33,39 +33,65 @@ def get_commit_lengths(folder: str) -> List[int]:
 
 
 def plot_length_distribution(benign_lengths: List[int], vuln_lengths: List[int]):
-    plt.figure(figsize=(12, 6))
+    all_lengths = benign_lengths + vuln_lengths
 
-    # Plot histograms
-    plt.hist(benign_lengths, bins=50, alpha=0.5, label="Benign Commits")
-    plt.hist(
-        vuln_lengths, bins=50, alpha=0.5, label="Vulnerability-Introducing Commits"
-    )
+    if not all_lengths:
+        print("Warning: No commit lengths found.")
+        return
 
-    plt.xlabel("Commit Length (number of tokens)")
-    plt.ylabel("Frequency")
-    plt.title("Distribution of Commit Lengths")
-    plt.legend()
-
-    # Add vertical lines for different percentiles
     percentiles = [50, 75, 90, 95, 99]
     colors = ["r", "g", "b", "c", "m"]
+    thresholds = [np.percentile(all_lengths, p) for p in percentiles]
 
-    all_lengths = benign_lengths + vuln_lengths
-    if all_lengths:
-        for p, color in zip(percentiles, colors):
-            threshold = np.percentile(all_lengths, p)
-            plt.axvline(
-                x=threshold,
-                color=color,
-                linestyle="--",
-                label=f"{p}th percentile: {threshold:.0f}",
-            )
-    else:
-        print("Warning: No commit lengths found.")
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, figsize=(12, 12), gridspec_kw={"height_ratios": [3, 1]}
+    )
 
-    plt.legend()
+    # Main plot (log scale, up to 99th percentile)
+    max_x = thresholds[-1]
+    bins = np.logspace(np.log10(1), np.log10(max_x), 100)
+
+    ax1.hist(benign_lengths, bins=bins, alpha=0.5, label="Benign Commits", density=True)
+    ax1.hist(
+        vuln_lengths,
+        bins=bins,
+        alpha=0.5,
+        label="Vulnerability-Introducing Commits",
+        density=True,
+    )
+
+    ax1.set_xscale("log")
+    ax1.set_xlabel("Commit Length (number of tokens, log scale)")
+    ax1.set_ylabel("Density")
+    ax1.set_title("Distribution of Commit Lengths (up to 99th percentile)")
+    ax1.legend()
+
+    for p, color, threshold in zip(percentiles, colors, thresholds):
+        ax1.axvline(
+            x=threshold,
+            color=color,
+            linestyle="--",
+            label=f"{p}th percentile: {threshold:.0f}",
+        )
+
+    ax1.legend()
+
+    # Overview plot (full range)
+    ax2.hist(benign_lengths, bins=50, alpha=0.5, label="Benign Commits", density=True)
+    ax2.hist(
+        vuln_lengths,
+        bins=50,
+        alpha=0.5,
+        label="Vulnerability-Introducing Commits",
+        density=True,
+    )
+
+    ax2.set_xlabel("Commit Length (number of tokens)")
+    ax2.set_ylabel("Density")
+    ax2.set_title("Overview of Full Distribution")
+
     plt.tight_layout()
-    plt.savefig("commit_length_distribution.png")
+    plt.savefig("commit_length_distribution.png", dpi=300)
     plt.close()
 
 
@@ -85,6 +111,14 @@ def print_statistics(benign_lengths: List[int], vuln_lengths: List[int]):
     for p in percentiles:
         threshold = np.percentile(all_lengths, p)
         print(f"{p}th percentile: {threshold:.0f}")
+
+    print("\nBenign Commits Statistics:")
+    print(f"Mean length: {np.mean(benign_lengths):.2f}")
+    print(f"Median length: {np.median(benign_lengths):.2f}")
+
+    print("\nVulnerability-Introducing Commits Statistics:")
+    print(f"Mean length: {np.mean(vuln_lengths):.2f}")
+    print(f"Median length: {np.median(vuln_lengths):.2f}")
 
 
 def main():
