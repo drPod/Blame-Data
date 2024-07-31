@@ -11,6 +11,8 @@ from constants import (
     BENIGN_PATCHES_DIR,
     TOKENIZED_BENIGN_COMMITS_DIR,
     TOKENIZED_VULN_INTRO_COMMITS_DIR,
+    VECTOR_BENIGN_COMMITS_DIR,
+    VECTOR_VULN_INTRO_COMMITS_DIR,
 )
 from constants import loggingConfig
 
@@ -28,6 +30,8 @@ def ensure_dirs():
         BENIGN_PATCHES_DIR,
         TOKENIZED_BENIGN_COMMITS_DIR,
         TOKENIZED_VULN_INTRO_COMMITS_DIR,
+        VECTOR_BENIGN_COMMITS_DIR,
+        VECTOR_VULN_INTRO_COMMITS_DIR,
     ]:
         os.makedirs(directory, exist_ok=True)
         logging.info(f"Directory {directory} exists.")

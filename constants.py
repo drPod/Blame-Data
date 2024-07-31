@@ -13,6 +13,9 @@ BENIGN_PATCHES_DIR = "benign_patches"
 TOKENIZED_BENIGN_COMMITS_DIR = "tokenized_benign_commits"
 TOKENIZED_VULN_INTRO_COMMITS_DIR = "tokenized_vuln_intro_commits"
 
+VECTOR_BENIGN_COMMITS_DIR = "vector_benign_commits_dir"
+VECTOR_VULN_INTRO_COMMITS_DIR = "vector_vuln_intro_commits_dir"
+
 
 def loggingConfig():
     logging.basicConfig(

@@ -11,3 +11,6 @@ commits_with_blame_data.csv
 /benign_patches
 /tokenized_vuln_intro_commits
 /tokenized_benign_commits
+/vector_benign_commits_dir
+/vector_vuln_intro_commits_dir
+word2vec_model.model*
