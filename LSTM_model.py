@@ -13,11 +13,12 @@ from constants import VECTOR_BENIGN_COMMITS_DIR, VECTOR_VULN_INTRO_COMMITS_DIR
 def load_data(benign_dir, malicious_dir):
     def load_commits_from_dir(directory):
         all_commits = []
-        for filename in os.listdir(directory):
-            if filename.endswith(".json"):
-                with open(os.path.join(directory, filename), "r") as f:
-                    commits = json.load(f)
-                    all_commits.extend(list(commits.values()))
+        for root, _, files in os.walk(directory):
+            for filename in files:
+                if filename.endswith(".json"):
+                    with open(os.path.join(root, filename), "r") as f:
+                        commits = json.load(f)
+                        all_commits.extend(list(commits.values()))
         return np.array(all_commits)
 
     benign_commits = load_commits_from_dir(benign_dir)
@@ -37,6 +38,10 @@ print(f"Total number of samples: {len(X)}")
 print(f"Number of benign samples: {np.sum(y == 0)}")
 print(f"Number of malicious samples: {np.sum(y == 1)}")
 print(f"Shape of each sample: {X[0].shape}")
+
+# Check if we have enough data to proceed
+if len(X) == 0:
+    raise ValueError("No data was loaded. Please check your input directories.")
 
 # Split the data
 X_train, X_test, y_train, y_test = train_test_split(
