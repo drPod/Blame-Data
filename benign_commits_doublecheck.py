@@ -1,11 +1,11 @@
 import os
-from constants import BENIGN_COMMITS_DIR, VULNERABILITY_INTRO_METADATA_DIR
+from constants import VECTOR_BENIGN_COMMITS_DIR, VULNERABILITY_INTRO_METADATA_DIR
 
 benign_files = {}
 vuln_files = {}
 
 # Collect all JSON files from benign_commits
-for root, _, files in os.walk(BENIGN_COMMITS_DIR):
+for root, _, files in os.walk(VECTOR_BENIGN_COMMITS_DIR):
     for file in files:
         if file.endswith(".json"):
             benign_files[file] = os.path.join(root, file)
