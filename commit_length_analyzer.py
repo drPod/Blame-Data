@@ -8,18 +8,23 @@ from constants import (
     VECTOR_VULN_INTRO_COMMITS_DIR,
     VECTOR_BENIGN_COMMITS_DIR,
 )
-from ensure_directories import ensure_dirs
 
 
 def get_commit_lengths(folder: str) -> List[int]:
     lengths = []
-    for filename in os.listdir(folder):
-        if filename.endswith(".json"):
-            file_path = os.path.join(folder, filename)
-            data = read_json_file(file_path)
-            for changes in data["file_changes"].values():
-                lengths.append(len(changes["added_lines"]))
-                lengths.append(len(changes["removed_lines"]))
+    for root, dirs, files in os.walk(folder):
+        for filename in files:
+            if filename.endswith(".json"):
+                file_path = os.path.join(root, filename)
+                try:
+                    data = read_json_file(file_path)
+                    for changes in data["file_changes"].values():
+                        lengths.append(len(changes["added_lines"]))
+                        lengths.append(len(changes["removed_lines"]))
+                except json.JSONDecodeError:
+                    print(f"Error reading JSON file: {file_path}")
+                except KeyError:
+                    print(f"Unexpected JSON structure in file: {file_path}")
     return lengths
 
 
@@ -42,14 +47,17 @@ def plot_length_distribution(benign_lengths: List[int], vuln_lengths: List[int])
     colors = ["r", "g", "b", "c", "m"]
 
     all_lengths = benign_lengths + vuln_lengths
-    for p, color in zip(percentiles, colors):
-        threshold = np.percentile(all_lengths, p)
-        plt.axvline(
-            x=threshold,
-            color=color,
-            linestyle="--",
-            label=f"{p}th percentile: {threshold:.0f}",
-        )
+    if all_lengths:
+        for p, color in zip(percentiles, colors):
+            threshold = np.percentile(all_lengths, p)
+            plt.axvline(
+                x=threshold,
+                color=color,
+                linestyle="--",
+                label=f"{p}th percentile: {threshold:.0f}",
+            )
+    else:
+        print("Warning: No commit lengths found.")
 
     plt.legend()
     plt.tight_layout()
@@ -59,6 +67,10 @@ def plot_length_distribution(benign_lengths: List[int], vuln_lengths: List[int])
 
 def print_statistics(benign_lengths: List[int], vuln_lengths: List[int]):
     all_lengths = benign_lengths + vuln_lengths
+
+    if not all_lengths:
+        print("No commit lengths found. Unable to compute statistics.")
+        return
 
     print("Overall Statistics:")
     print(f"Mean length: {np.mean(all_lengths):.2f}")
@@ -75,10 +87,13 @@ def main():
     benign_lengths = get_commit_lengths(VECTOR_BENIGN_COMMITS_DIR)
     vuln_lengths = get_commit_lengths(VECTOR_VULN_INTRO_COMMITS_DIR)
 
+    if not benign_lengths and not vuln_lengths:
+        print("No commit data found. Please check your input directories.")
+        return
+
     plot_length_distribution(benign_lengths, vuln_lengths)
     print_statistics(benign_lengths, vuln_lengths)
 
 
 if __name__ == "__main__":
-    ensure_dirs()
     main()
