@@ -3,11 +3,15 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Dict
-from vectorized_commit_processor import read_json_file
 from constants import (
     VECTOR_VULN_INTRO_COMMITS_DIR,
     VECTOR_BENIGN_COMMITS_DIR,
 )
+
+
+def read_json_file(file_path: str) -> Dict:
+    with open(file_path, "r") as f:
+        return json.load(f)
 
 
 def get_commit_lengths(folder: str) -> List[int]:
@@ -18,13 +22,13 @@ def get_commit_lengths(folder: str) -> List[int]:
                 file_path = os.path.join(root, filename)
                 try:
                     data = read_json_file(file_path)
-                    for changes in data["file_changes"].values():
-                        lengths.append(len(changes["added_lines"]))
-                        lengths.append(len(changes["removed_lines"]))
+                    # Count the number of vectors (tokens) in the JSON file
+                    length = len(data)
+                    lengths.append(length)
                 except json.JSONDecodeError:
                     print(f"Error reading JSON file: {file_path}")
-                except KeyError:
-                    print(f"Unexpected JSON structure in file: {file_path}")
+                except Exception as e:
+                    print(f"Unexpected error processing file {file_path}: {str(e)}")
     return lengths
 
 
@@ -37,7 +41,7 @@ def plot_length_distribution(benign_lengths: List[int], vuln_lengths: List[int])
         vuln_lengths, bins=50, alpha=0.5, label="Vulnerability-Introducing Commits"
     )
 
-    plt.xlabel("Commit Length (number of vectors)")
+    plt.xlabel("Commit Length (number of tokens)")
     plt.ylabel("Frequency")
     plt.title("Distribution of Commit Lengths")
     plt.legend()
