@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 from typing import List, Dict
+from tqdm import tqdm
 from constants import (
     VECTOR_VULN_INTRO_COMMITS_DIR,
     VECTOR_BENIGN_COMMITS_DIR,
@@ -49,6 +50,12 @@ def process_file_changes(
 def process_json_file(
     input_file: str, output_file: str, threshold: int, pad_vector: List[float]
 ):
+    # Check if output file already exists and is up to date
+    if os.path.exists(output_file) and os.path.getmtime(
+        output_file
+    ) >= os.path.getmtime(input_file):
+        return  # Skip processing if output is up to date
+
     data = read_json_file(input_file)
     processed_data = {}
 
@@ -66,6 +73,8 @@ def process_folder(
     input_folder: str, output_folder: str, threshold: int, pad_vector: List[float]
 ):
     os.makedirs(output_folder, exist_ok=True)
+    files_to_process = []
+
     for root, _, files in os.walk(input_folder):
         for filename in files:
             if filename.endswith(".json"):
@@ -74,7 +83,12 @@ def process_folder(
                 output_subdir = os.path.join(output_folder, relative_path)
                 os.makedirs(output_subdir, exist_ok=True)
                 output_file = os.path.join(output_subdir, filename)
-                process_json_file(input_file, output_file, threshold, pad_vector)
+                files_to_process.append((input_file, output_file))
+
+    for input_file, output_file in tqdm(
+        files_to_process, desc=f"Processing {input_folder}"
+    ):
+        process_json_file(input_file, output_file, threshold, pad_vector)
 
 
 def process_file(file_path: str, max_lines: int, vector_dim: int) -> tuple:
@@ -145,7 +159,7 @@ def main():
     # Delete vectors if they exceed the threshold
     for folder in [VECTOR_VULN_INTRO_COMMITS_DIR, VECTOR_BENIGN_COMMITS_DIR]:
         for root, _, files in os.walk(folder):
-            for filename in files:
+            for filename in tqdm(files, desc=f"Deleting excess vectors in {folder}"):
                 if filename.endswith(".json"):
                     delete_vectors_if_exceeds_threshold(
                         os.path.join(root, filename), threshold, pad_vector
