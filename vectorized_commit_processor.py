@@ -50,10 +50,16 @@ def process_json_file(
     input_file: str, output_file: str, threshold: int, pad_vector: List[float]
 ):
     data = read_json_file(input_file)
-    data["file_changes"] = process_file_changes(
-        data["file_changes"], threshold, pad_vector
-    )
-    write_json_file(output_file, data)
+    processed_data = {}
+
+    for word, vector in list(data.items())[:threshold]:
+        processed_data[word] = vector
+
+    # Pad if necessary
+    while len(processed_data) < threshold:
+        processed_data[f"pad_{len(processed_data)}"] = pad_vector
+
+    write_json_file(output_file, processed_data)
 
 
 def process_folder(
@@ -72,20 +78,20 @@ def process_folder(
 
 
 def process_file(file_path: str, max_lines: int, vector_dim: int) -> tuple:
-    print(f"Processing file: {file_path}")  # Debug print
     data = read_json_file(file_path)
-    for changes in data["file_changes"].values():
-        max_lines = max(
-            max_lines, len(changes["added_lines"]), len(changes["removed_lines"])
-        )
-        if vector_dim is None and changes["added_lines"]:
-            vector_dim = len(changes["added_lines"][0])
-    print(f"Current max_lines: {max_lines}, vector_dim: {vector_dim}")  # Debug print
+
+    # Count the number of vectors (words)
+    num_vectors = len(data)
+    max_lines = max(max_lines, num_vectors)
+
+    # Get the dimension of the vectors
+    if vector_dim is None and data:
+        vector_dim = len(next(iter(data.values())))
+
     return max_lines, vector_dim
 
 
 def process_directory(directory: str, max_lines: int, vector_dim: int) -> tuple:
-    print(f"Processing directory: {directory}")  # Debug print
     for root, _, files in os.walk(directory):
         for filename in files:
             if filename.endswith(".json"):
@@ -110,9 +116,6 @@ def determine_threshold_and_pad_vector(
     # Set the pad vector to a vector of zeros with the same dimension as the vectors
     pad_vector = [0.0] * vector_dim if vector_dim is not None else []
 
-    print(
-        f"Final max_lines: {max_lines}, threshold: {threshold}, pad_vector length: {len(pad_vector)}"
-    )  # Debug print
     return threshold, pad_vector
 
 
@@ -120,13 +123,9 @@ def delete_vectors_if_exceeds_threshold(
     file_path: str, threshold: int, pad_vector: List[float]
 ):
     data = read_json_file(file_path)
-    for file_name, changes in data["file_changes"].items():
-        for change_type in ["added_lines", "removed_lines"]:
-            if len(changes[change_type]) > threshold:
-                data["file_changes"][file_name][change_type] = changes[change_type][
-                    :threshold
-                ]
-    write_json_file(file_path, data)
+    if len(data) > threshold:
+        processed_data = dict(list(data.items())[:threshold])
+        write_json_file(file_path, processed_data)
 
 
 def main():

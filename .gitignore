@@ -14,3 +14,5 @@ commits_with_blame_data.csv
 /vector_benign_commits_dir
 /vector_vuln_intro_commits_dir
 word2vec_model.model*
+/padded_benign_commits
+/padded_vuln_intro_commits
