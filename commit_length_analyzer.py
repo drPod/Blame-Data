@@ -43,8 +43,8 @@ def plot_length_distribution(benign_lengths: List[int], vuln_lengths: List[int])
     colors = ["r", "g", "b", "c", "m"]
     thresholds = [np.percentile(all_lengths, p) for p in percentiles]
 
-    fig, (ax1, ax2) = plt.subplots(
-        2, 1, figsize=(12, 12), gridspec_kw={"height_ratios": [3, 1]}
+    fig, (ax1, ax2, ax3) = plt.subplots(
+        3, 1, figsize=(12, 18), gridspec_kw={"height_ratios": [3, 1, 2]}
     )
 
     # Main plot (log scale, up to 99th percentile)
@@ -90,8 +90,37 @@ def plot_length_distribution(benign_lengths: List[int], vuln_lengths: List[int])
     ax2.set_ylabel("Density")
     ax2.set_title("Overview of Full Distribution")
 
+    # CDF plot
+    sorted_benign = np.sort(benign_lengths)
+    sorted_vuln = np.sort(vuln_lengths)
+    yvals_benign = np.arange(len(sorted_benign)) / float(len(sorted_benign) - 1)
+    yvals_vuln = np.arange(len(sorted_vuln)) / float(len(sorted_vuln) - 1)
+
+    ax3.plot(sorted_benign, yvals_benign, label="Benign Commits")
+    ax3.plot(sorted_vuln, yvals_vuln, label="Vulnerability-Introducing Commits")
+    ax3.set_xscale("log")
+    ax3.set_xlabel("Commit Length (number of tokens, log scale)")
+    ax3.set_ylabel("Cumulative Probability")
+    ax3.set_title("Cumulative Distribution Function (CDF)")
+    ax3.legend()
+
+    for p, color, threshold in zip(percentiles, colors, thresholds):
+        ax3.axvline(
+            x=threshold,
+            color=color,
+            linestyle="--",
+            label=f"{p}th percentile: {threshold:.0f}",
+        )
+        ax3.axhline(
+            y=p / 100,
+            color=color,
+            linestyle=":",
+        )
+
+    ax3.legend()
+
     plt.tight_layout()
-    plt.savefig("commit_length_distribution.png", dpi=300)
+    plt.savefig("commit_length_distribution_with_cdf.png", dpi=300)
     plt.close()
 
 
