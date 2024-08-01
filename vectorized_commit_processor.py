@@ -67,7 +67,9 @@ def process_folder(
             process_json_file(input_file, output_file, threshold, pad_vector)
 
 
-def determine_threshold_and_pad_vector(vuln_folder: str, benign_folder: str) -> tuple:
+def determine_threshold_and_pad_vector(
+    vuln_folder: str, benign_folder: str, threshold_percentage: float
+) -> tuple:
     max_lines = 0
     vector_dim = None
 
@@ -86,7 +88,10 @@ def determine_threshold_and_pad_vector(vuln_folder: str, benign_folder: str) -> 
             if filename.endswith(".json"):
                 process_file(os.path.join(folder, filename))
 
-    threshold = max_lines
+    # Set the threshold
+    threshold = int(max_lines * threshold_percentage)
+
+    # Set the pad vector to a vector of zeros with the same dimension as the vectors
     pad_vector = [0.0] * vector_dim if vector_dim is not None else []
 
     return threshold, pad_vector
@@ -107,10 +112,14 @@ def delete_vectors_if_exceeds_threshold(
 
 def main():
 
+    # Ensure directories exist
     ensure_dirs()
 
+    # Set the threshold percentage
+    THRESHOLD_PERCENTAGE = 0.6
+
     threshold, pad_vector = determine_threshold_and_pad_vector(
-        VECTOR_VULN_INTRO_COMMITS_DIR, VECTOR_BENIGN_COMMITS_DIR
+        VECTOR_VULN_INTRO_COMMITS_DIR, VECTOR_BENIGN_COMMITS_DIR, THRESHOLD_PERCENTAGE
     )
 
     print(f"Determined threshold: {threshold}")
