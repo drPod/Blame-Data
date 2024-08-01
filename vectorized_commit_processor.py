@@ -91,46 +91,15 @@ def process_folder(
         process_json_file(input_file, output_file, threshold, pad_vector)
 
 
-def process_file(file_path: str, max_lines: int, vector_dim: int) -> tuple:
-    data = read_json_file(file_path)
-
-    # Count the number of vectors (words)
-    num_vectors = len(data)
-    max_lines = max(max_lines, num_vectors)
-
-    # Get the dimension of the vectors
-    if vector_dim is None and data:
-        vector_dim = len(next(iter(data.values())))
-
-    return max_lines, vector_dim
-
-
-def process_directory(directory: str, max_lines: int, vector_dim: int) -> tuple:
+def get_vector_dim(directory: str) -> int:
     for root, _, files in os.walk(directory):
         for filename in files:
             if filename.endswith(".json"):
-                max_lines, vector_dim = process_file(
-                    os.path.join(root, filename), max_lines, vector_dim
-                )
-    return max_lines, vector_dim
-
-
-def determine_threshold_and_pad_vector(
-    vuln_folder: str, benign_folder: str, threshold_percentage: float
-) -> tuple:
-    max_lines = 0
-    vector_dim = None
-
-    for folder in [vuln_folder, benign_folder]:
-        max_lines, vector_dim = process_directory(folder, max_lines, vector_dim)
-
-    # Set the threshold
-    threshold = int(max_lines * threshold_percentage)
-
-    # Set the pad vector to a vector of zeros with the same dimension as the vectors
-    pad_vector = [0.0] * vector_dim if vector_dim is not None else []
-
-    return threshold, pad_vector
+                file_path = os.path.join(root, filename)
+                data = read_json_file(file_path)
+                if data:
+                    return len(next(iter(data.values())))
+    return 0
 
 
 def delete_vectors_if_exceeds_threshold(
@@ -146,14 +115,18 @@ def main():
     # Ensure directories exist
     ensure_dirs()
 
-    # Set the threshold percentage
-    THRESHOLD_PERCENTAGE = 0.6
+    # Set the fixed threshold
+    THRESHOLD = 500
 
-    threshold, pad_vector = determine_threshold_and_pad_vector(
-        VECTOR_VULN_INTRO_COMMITS_DIR, VECTOR_BENIGN_COMMITS_DIR, THRESHOLD_PERCENTAGE
-    )
+    # Get the vector dimension from existing files
+    vector_dim = get_vector_dim(VECTOR_VULN_INTRO_COMMITS_DIR)
+    if vector_dim == 0:
+        vector_dim = get_vector_dim(VECTOR_BENIGN_COMMITS_DIR)
 
-    print(f"Determined threshold: {threshold}")
+    # Set the pad vector
+    pad_vector = [0.0] * vector_dim if vector_dim > 0 else []
+
+    print(f"Using fixed threshold: {THRESHOLD}")
     print(f"Determined pad vector dimension: {len(pad_vector)}")
 
     # Delete vectors if they exceed the threshold
@@ -162,17 +135,17 @@ def main():
             for filename in tqdm(files, desc=f"Deleting excess vectors in {folder}"):
                 if filename.endswith(".json"):
                     delete_vectors_if_exceeds_threshold(
-                        os.path.join(root, filename), threshold, pad_vector
+                        os.path.join(root, filename), THRESHOLD, pad_vector
                     )
 
     process_folder(
         VECTOR_VULN_INTRO_COMMITS_DIR,
         PADDED_VULN_INTRO_COMMITS_DIR,
-        threshold,
+        THRESHOLD,
         pad_vector,
     )
     process_folder(
-        VECTOR_BENIGN_COMMITS_DIR, PADDED_BENIGN_COMMITS_DIR, threshold, pad_vector
+        VECTOR_BENIGN_COMMITS_DIR, PADDED_BENIGN_COMMITS_DIR, THRESHOLD, pad_vector
     )
 
 
