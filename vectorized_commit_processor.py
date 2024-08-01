@@ -60,11 +60,39 @@ def process_folder(
     input_folder: str, output_folder: str, threshold: int, pad_vector: List[float]
 ):
     os.makedirs(output_folder, exist_ok=True)
-    for filename in os.listdir(input_folder):
-        if filename.endswith(".json"):
-            input_file = os.path.join(input_folder, filename)
-            output_file = os.path.join(output_folder, filename)
-            process_json_file(input_file, output_file, threshold, pad_vector)
+    for root, _, files in os.walk(input_folder):
+        for filename in files:
+            if filename.endswith(".json"):
+                input_file = os.path.join(root, filename)
+                relative_path = os.path.relpath(root, input_folder)
+                output_subdir = os.path.join(output_folder, relative_path)
+                os.makedirs(output_subdir, exist_ok=True)
+                output_file = os.path.join(output_subdir, filename)
+                process_json_file(input_file, output_file, threshold, pad_vector)
+
+
+def process_file(file_path: str, max_lines: int, vector_dim: int) -> tuple:
+    print(f"Processing file: {file_path}")  # Debug print
+    data = read_json_file(file_path)
+    for changes in data["file_changes"].values():
+        max_lines = max(
+            max_lines, len(changes["added_lines"]), len(changes["removed_lines"])
+        )
+        if vector_dim is None and changes["added_lines"]:
+            vector_dim = len(changes["added_lines"][0])
+    print(f"Current max_lines: {max_lines}, vector_dim: {vector_dim}")  # Debug print
+    return max_lines, vector_dim
+
+
+def process_directory(directory: str, max_lines: int, vector_dim: int) -> tuple:
+    print(f"Processing directory: {directory}")  # Debug print
+    for root, _, files in os.walk(directory):
+        for filename in files:
+            if filename.endswith(".json"):
+                max_lines, vector_dim = process_file(
+                    os.path.join(root, filename), max_lines, vector_dim
+                )
+    return max_lines, vector_dim
 
 
 def determine_threshold_and_pad_vector(
@@ -73,20 +101,8 @@ def determine_threshold_and_pad_vector(
     max_lines = 0
     vector_dim = None
 
-    def process_file(file_path):
-        nonlocal max_lines, vector_dim
-        data = read_json_file(file_path)
-        for changes in data["file_changes"].values():
-            max_lines = max(
-                max_lines, len(changes["added_lines"]), len(changes["removed_lines"])
-            )
-            if vector_dim is None and changes["added_lines"]:
-                vector_dim = len(changes["added_lines"][0])
-
     for folder in [vuln_folder, benign_folder]:
-        for filename in os.listdir(folder):
-            if filename.endswith(".json"):
-                process_file(os.path.join(folder, filename))
+        max_lines, vector_dim = process_directory(folder, max_lines, vector_dim)
 
     # Set the threshold
     threshold = int(max_lines * threshold_percentage)
@@ -94,6 +110,9 @@ def determine_threshold_and_pad_vector(
     # Set the pad vector to a vector of zeros with the same dimension as the vectors
     pad_vector = [0.0] * vector_dim if vector_dim is not None else []
 
+    print(
+        f"Final max_lines: {max_lines}, threshold: {threshold}, pad_vector length: {len(pad_vector)}"
+    )  # Debug print
     return threshold, pad_vector
 
 
@@ -111,7 +130,6 @@ def delete_vectors_if_exceeds_threshold(
 
 
 def main():
-
     # Ensure directories exist
     ensure_dirs()
 
@@ -127,11 +145,12 @@ def main():
 
     # Delete vectors if they exceed the threshold
     for folder in [VECTOR_VULN_INTRO_COMMITS_DIR, VECTOR_BENIGN_COMMITS_DIR]:
-        for filename in os.listdir(folder):
-            if filename.endswith(".json"):
-                delete_vectors_if_exceeds_threshold(
-                    os.path.join(folder, filename), threshold, pad_vector
-                )
+        for root, _, files in os.walk(folder):
+            for filename in files:
+                if filename.endswith(".json"):
+                    delete_vectors_if_exceeds_threshold(
+                        os.path.join(root, filename), threshold, pad_vector
+                    )
 
     process_folder(
         VECTOR_VULN_INTRO_COMMITS_DIR,
